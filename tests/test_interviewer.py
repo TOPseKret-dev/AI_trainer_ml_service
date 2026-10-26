@@ -6,21 +6,58 @@ from app.schemas.interviewer import InterviewerResponse
 URL = "/api/v1/interviewer"
 
 
-def test_follow_up(client, interviewer_payload):
+def test_follow_up(client, interviewer_payload, interviewer_result, mock_router):
     response = client.post(URL, json=interviewer_payload)
     assert response.status_code == 200
     assert set(response.json()) == {"action", "message"}
     assert response.json()["action"] == "follow_up"
     assert response.json()["message"].strip()
-    assert client.post(URL, json=interviewer_payload).json() == response.json()
+    assert response.json() == interviewer_result
+    assert len(mock_router.calls) == 1
+
+
+def test_early_complete(client, interviewer_payload, interviewer_scenarios, mock_router):
+    interviewer_payload["dialogue"][0]["content"] = interviewer_scenarios["complete"]
+    mock_router.queue({"action": "complete", "message": None})
+    response = client.post(URL, json=interviewer_payload)
+    assert response.status_code == 200
+    assert response.json() == {"action": "complete", "message": None}
+    assert len(mock_router.calls) == 1
 
 
 @pytest.mark.parametrize(("count", "maximum"), [(3, 3), (4, 3), (0, 0)])
-def test_complete_at_or_above_limit(client, interviewer_payload, count, maximum):
+def test_complete_at_or_above_limit(client, interviewer_payload, mock_router, count, maximum):
     interviewer_payload.update(follow_up_count=count, max_follow_ups=maximum)
     response = client.post(URL, json=interviewer_payload)
     assert response.status_code == 200
     assert response.json() == {"action": "complete", "message": None}
+    assert mock_router.calls == []
+
+
+@pytest.mark.parametrize(
+    "result",
+    [
+        {"action": "complete", "message": "must not be repaired silently"},
+        {"action": "follow_up", "message": "  "},
+        {"action": "follow_up", "message": None},
+        {"action": "other", "message": None},
+        {"action": "complete", "message": None, "extra": "forbidden"},
+        "not JSON",
+    ],
+)
+def test_invalid_output_has_at_most_one_repair(client, interviewer_payload, mock_router, result):
+    mock_router.queue(result, result)
+    response = client.post(URL, json=interviewer_payload)
+    assert response.status_code == 502
+    assert len(mock_router.calls) == 2
+
+
+def test_structural_repair_succeeds(client, interviewer_payload, mock_router, interviewer_result):
+    mock_router.queue({"action": "complete", "message": "invalid"}, interviewer_result)
+    response = client.post(URL, json=interviewer_payload)
+    assert response.status_code == 200
+    assert response.json() == interviewer_result
+    assert len(mock_router.calls) == 2
 
 
 def test_invalid_role(client, interviewer_payload):

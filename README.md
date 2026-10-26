@@ -1,8 +1,9 @@
 # InterSim ML service
 
 Stateless HTTP service на Python 3.11+ (рекомендуется 3.12), FastAPI, Uvicorn и Pydantic v2.
-Все четыре ML-функции — **детерминированные STUB**, без реальных LLM, ASR,
-внешних API, БД, авторизации и хранения истории. Endpoint генерации возвращает
+Interviewer и Evaluator используют реальный OpenRouter. Transcription и
+question-bank generation остаются **детерминированными STUB**.
+Сервис не использует БД, авторизацию и хранение истории. Endpoint генерации возвращает
 только черновики. Orchestration, persistence, публикация вопросов и итоговый
 пользовательский score остаются ответственностью backend.
 
@@ -18,9 +19,56 @@ pip install -e ".[dev]"
 ```
 
 Если Python 3.12 отсутствует, используйте `python3 -m venv .venv` с Python >=3.11.
-Переменные окружения и API keys не нужны; `.env.example` служит пояснением,
-автоматической загрузки `.env` нет. Версии зависимостей ограничены в `pyproject.toml`.
+Для Interviewer/Evaluator настройте OpenRouter, как описано ниже.
+Версии зависимостей ограничены в `pyproject.toml`.
 Команды ниже выполняются после активации `.venv`.
+
+## OpenRouter configuration
+
+Скопируйте `.env.example` в `.env` и задайте ключ локально либо через environment.
+Environment имеет приоритет; Pydantic Settings автоматически загружает `.env`.
+`.env` игнорируется Git. Пример без ключа:
+
+```env
+OPENROUTER_API_KEY=
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
+OPENROUTER_MODEL=qwen/qwen3.5-27b
+OPENROUTER_PROVIDER=alibaba
+OPENROUTER_TIMEOUT_SECONDS=55
+```
+
+Модель закреплена: `qwen/qwen3.5-27b`. Alibaba Cloud International закреплён
+через `provider.order=["alibaba"]`, `allow_fallbacks=false`, `require_parameters=true`.
+Slug `alibaba` и поддержка `reasoning`, `response_format`, `structured_outputs`
+проверены по [публичному endpoints API](https://openrouter.ai/api/v1/models/qwen/qwen3.5-27b/endpoints).
+Модель и провайдер в settings ограничены этими значениями: смена требует проверки возможностей.
+[Provider routing](https://openrouter.ai/docs/guides/routing/provider-selection).
+
+Interviewer: temperature **0.2**. Evaluator: temperature **0.0**.
+Reasoning явно отключён через `reasoning={"enabled": false}`; это отключение,
+а не скрытие reasoning-текста. Параметр поддерживается выбранным endpoint,
+reasoning у модели не является обязательным.
+[Reasoning API](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens).
+Usage автоматически приходит в том же response, без дополнительного inference
+и без устаревшего `usage.include`:
+[Usage accounting](https://openrouter.ai/docs/cookbook/administration/usage-accounting).
+
+Общий `httpx.AsyncClient` создаётся на lifespan FastAPI и закрывается при остановке.
+Timeout **55 секунд** применяется к HTTP connect/read/write/pool операциям каждого attempt;
+это не общий deadline для двух attempts. При нарушении structured/domain контракта
+разрешён ровно один semantic repair (не более двух платных calls на endpoint request).
+Сетевые/provider retries отсутствуют. Ошибки конфигурации, подключения, auth,
+rate limit и недоступности → 503; timeout → 504; invalid upstream output → 502.
+Полный upstream response наружу не возвращается.
+
+Без ключа приложение запускается, `/health`, Swagger и stub endpoints работают.
+Interviewer/Evaluator при необходимости LLM возвращают 503 с понятной ошибкой
+конфигурации. Hard max Interviewer работает и без ключа.
+
+- transcription — still stub;
+- question-bank generation — still stub;
+- interviewer — real OpenRouter;
+- evaluator — real OpenRouter.
 
 ## Run
 
@@ -33,8 +81,18 @@ uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ## Tests
 
 ```bash
-pytest
+.venv/bin/python -m pytest
 ```
+
+Обычный запуск исключает marker `integration`, даже если ключ настроен.
+Unit tests подменяют HTTP transport через dependency injection и не выполняют inference.
+Опциональный реальный smoke (два HTTP-запроса, максимум четыре inference calls с repair):
+
+```bash
+.venv/bin/python -m pytest -m integration
+```
+
+Без `OPENROUTER_API_KEY` из environment/`.env` эти два теста пропускаются.
 
 ## Lint
 
@@ -76,7 +134,7 @@ Project interpreter: **`.venv/bin/python`** в корне проекта.
 | GET | `/health` | Проверка работоспособности |
 | POST | `/api/v1/transcriptions` | Audio → stub text, provisional |
 | POST | `/api/v1/interviewer` | Решение об уточнении или завершении |
-| POST | `/api/v1/evaluator` | Stub-оценка каждого входного критерия |
+| POST | `/api/v1/evaluator` | LLM-оценка каждого входного критерия |
 | POST | `/api/v1/question-bank/generate` | Генерация черновиков, provisional |
 
 ### Health
@@ -140,8 +198,10 @@ JSON
 ```
 
 При `follow_up_count >= max_follow_ups` ответ:
-`{"action":"complete","message":null}`. Stub не анализирует ответ и не даёт подсказок.
-Оба счётчика обязательны и неотрицательны.
+`{"action":"complete","message":null}` без вызова OpenRouter. Ниже лимита LLM
+самостоятельно выбирает `follow_up` или ранний `complete`: лимит — верхняя граница,
+а не цель. Уточнение должно давать новую диагностическую информацию без подсказок.
+Оба счётчика обязательны и неотрицательны. Пример ответа выше иллюстративный.
 
 ### Evaluator
 
@@ -175,24 +235,28 @@ JSON
   "criteria": [
     {
       "criterion_id": "grouping",
-      "score": 0,
-      "status": "absent",
-      "comment": "Stub evaluator: real evaluation is not implemented yet.",
-      "evidence": []
+      "score": 1,
+      "status": "correct",
+      "comment": "Описана группировка строк по полям.",
+      "evidence": ["Группирует строки по указанным полям."]
     }
   ],
-  "summary": "Stub evaluation: real LLM evaluation is not implemented yet.",
+  "summary": "Назначение группировки раскрыто.",
   "recommendations": []
 }
 ```
 
-Это заглушка, а не реальная оценка качества ответа. Возвращаются все входные
-критерии в исходном порядке, с теми же ID. Выходное поле — **`comment`**.
+Пример иллюстрирует структуру, реальный результат зависит от LLM и rubric.
+Возвращаются все входные критерии ровно один раз, с теми же ID. Выходное поле — **`comment`**.
 ID критериев и баллы anchors уникальны; обязательны anchor 0 и положительный
 anchor. Разреженные шкалы допустимы: evaluator может вернуть только балл,
 явно заданный в anchors. `partial` требует `0 < score < max(anchors)`,
 `correct` — максимальный anchor; `absent` — 0 и пустой evidence,
-`incorrect` — 0. Эти правила проверяет `validate_evaluation` в service layer.
+`incorrect` — 0. Для каждого non-absent результата требуется evidence.
+Каждая цитата проверяется как дословный substring хотя бы одной реплики candidate
+из всей цепочки; interviewer/reference/rubric не используются как источник evidence.
+Эти правила проверяет `validate_evaluation` в service layer. Проверка substring
+подтверждает наличие цитаты, а её релевантность критерию определяет LLM.
 
 ### Question bank — PROVISIONAL CONTRACT
 
@@ -227,8 +291,16 @@ middle — middle/senior, senior — только senior. `difficulty` — не�
 - `app/api/`: HTTP, upload validation, routing; `/api/v1` для четырёх функций.
 - `app/schemas/`: строгие Pydantic v2 модели, `extra="forbid"`, ограничения
   строк/чисел и проверки связанных полей. Строки из одних пробелов отклоняются.
-- `app/services/`: отдельные async stub-функции. Реальный inference впоследствии
-  подключается здесь с сохранением сигнатур, маршрутов и HTTP-контрактов.
+- `app/services/`: async orchestration и domain validation; `structured.py` ограничивает repair.
+- `app/clients/openrouter.py`: auth, provider pinning, timeout, native strict JSON Schema
+  из существующих response models, разбор completion/usage и безопасные ошибки.
+- `app/settings.py`: environment/`.env`; секрет хранится как `SecretStr`.
+- `app/prompts/`: полные versioned prompts: `interviewer_v2_structured_1`,
+  `evaluator_v2_anchors_1`. Версии логируются при каждом attempt.
+- Два system messages содержат prompt и trusted configuration; dialogue сохраняет
+  порядок и роли `candidate → user`, `interviewer → assistant`. Interviewer не получает
+  reference answer. Repair добавляет только нарушения ограничений в trusted message,
+  без вставки недоверенного результата модели или candidate content.
 - `tests/`: HTTP-контракты, ошибки входа, структурные и доменные инварианты.
 
 Источники interviewer/evaluator: `json_schemas_v1.zip`, затем актуальные
@@ -236,6 +308,10 @@ middle — middle/senior, senior — только senior. `difficulty` — не�
 Сервис не считает overall score и не хранит пользователей, сессии или диалоги.
 
 В логах — функция/endpoint, success/failure, HTTP status и время HTTP-запроса.
+Каждый LLM attempt логирует service, model/provider, prompt version, attempt number,
+latency, HTTP/upstream status, finish reason и input/output/reasoning tokens, если доступны.
+Strict JSON Schema дополняется повторной Pydantic и domain validation;
+невалидабельный результат не исправляется эвристиками.
 Тела запросов, аудио, имена файлов, reference answers, candidate answers,
 query strings и секреты не логируются приложением. Uvicorn пишет свой обычный
 access log; не передавайте секреты в URL. Для отключения access log можно
@@ -253,5 +329,5 @@ access log; не передавайте секреты в URL. Для отклю
 2. **Question bank — PROVISIONAL CONTRACT**: финальная структура черновика,
    справочник difficulty и генерационный контекст. После согласования заменить
    provisional-контракт, обновить тесты и документацию.
-3. Заменить четыре stub-реализации реальным inference отдельной задачей;
-   текущая поставка не выполняет реальную оценку, генерацию или транскрибацию.
+3. Заменить transcription и question-bank generation реальным inference отдельными задачами.
+4. Выполнить opt-in OpenRouter smoke в окружении с настроенным ключом перед rollout.

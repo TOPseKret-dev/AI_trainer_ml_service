@@ -9,7 +9,7 @@ from app.services.evaluator import validate_evaluation
 URL = "/api/v1/evaluator"
 
 
-def test_evaluator_preserves_all_criteria(client, evaluator_payload):
+def test_evaluator_preserves_all_criteria(client, evaluator_payload, evaluator_result, mock_router):
     response = client.post(URL, json=evaluator_payload)
     assert response.status_code == 200
     result = response.json()
@@ -20,14 +20,9 @@ def test_evaluator_preserves_all_criteria(client, evaluator_payload):
     ]
     for criterion in result["criteria"]:
         assert set(criterion) == {"criterion_id", "score", "status", "comment", "evidence"}
-        assert criterion["score"] == 0
-        assert criterion["status"] == "absent"
-        assert criterion["evidence"] == []
-        assert criterion["comment"] == "Stub evaluator: real evaluation is not implemented yet."
         assert "explanation" not in criterion
-    assert result["summary"] == "Stub evaluation: real LLM evaluation is not implemented yet."
-    assert result["recommendations"] == []
-    assert client.post(URL, json=evaluator_payload).json() == result
+    assert result == evaluator_result
+    assert len(mock_router.calls) == 1
 
 
 def test_duplicate_criterion_ids(client, evaluator_payload):
@@ -105,13 +100,14 @@ def test_output_structural_invariants(status, score, evidence):
 
 
 @pytest.fixture
-def rubric_response(client, evaluator_payload):
-    return client.post(URL, json=evaluator_payload).json()
+def rubric_response(evaluator_result):
+    return deepcopy(evaluator_result)
 
 
 @pytest.mark.parametrize(("status", "score"), [("partial", 2), ("correct", 4), ("incorrect", 0)])
 def test_domain_validation_accepts_valid_scores(evaluator_payload, rubric_response, status, score):
     rubric_response["criteria"][1].update(status=status, score=score)
+    rubric_response["criteria"][1]["evidence"] = ["Группирует строки."]
     validate_evaluation(
         EvaluatorRequest.model_validate(evaluator_payload),
         EvaluatorResponse.model_validate(rubric_response),
@@ -146,4 +142,120 @@ def test_domain_validation_rejects_incorrect_criterion_set(
         validate_evaluation(
             EvaluatorRequest.model_validate(evaluator_payload),
             EvaluatorResponse.model_validate(rubric_response),
+        )
+
+
+@pytest.mark.parametrize(("status", "score"), [("partial", 2), ("correct", 5)])
+def test_arbitrary_anchors_endpoint(
+    client, evaluator_payload, evaluator_result, mock_router, status, score
+):
+    evaluator_payload["criteria"][1]["anchors"][2]["score"] = 5
+    evaluator_result["criteria"][1].update(
+        status=status, score=score, evidence=["Группирует строки."]
+    )
+    response = client.post(URL, json=evaluator_payload)
+    assert response.status_code == 200
+    assert response.json()["criteria"][1]["score"] == score
+    assert len(mock_router.calls) == 1
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "non_anchor",
+        "invalid_correct",
+        "partial_impossible",
+        "duplicate_id",
+        "missing_id",
+        "unknown_id",
+        "ungrounded",
+        "interviewer_evidence",
+        "reference_evidence",
+        "no_evidence",
+    ],
+)
+def test_invalid_domain_result_gets_one_repair_then_502(
+    client,
+    evaluator_payload,
+    evaluator_result,
+    mock_router,
+    mutation,
+):
+    evaluator_payload["criteria"][1]["anchors"][2]["score"] = 5
+    result = deepcopy(evaluator_result)
+    item = result["criteria"][1]
+    item.update(status="partial", score=2, evidence=["Группирует строки."])
+    if mutation == "non_anchor":
+        item["score"] = 3
+    elif mutation == "invalid_correct":
+        item["status"] = "correct"
+    elif mutation == "partial_impossible":
+        evaluator_payload["criteria"][1]["anchors"] = [
+            {"score": 0, "description": "Нет"},
+            {"score": 3, "description": "Полный"},
+        ]
+        item["score"] = 3
+    elif mutation == "duplicate_id":
+        item["criterion_id"] = "grouping"
+    elif mutation == "missing_id":
+        result["criteria"].pop()
+    elif mutation == "unknown_id":
+        item["criterion_id"] = "unknown"
+    elif mutation == "ungrounded":
+        item["evidence"] = ["private-fabricated-evidence"]
+    elif mutation == "interviewer_evidence":
+        evaluator_payload["dialogue"].append(
+            {"role": "interviewer", "content": "только интервьюер"}
+        )
+        item["evidence"] = ["только интервьюер"]
+    elif mutation == "reference_evidence":
+        item["evidence"] = [evaluator_payload["reference_answer"]]
+    else:
+        item["evidence"] = []
+    mock_router.queue(result, result)
+    response = client.post(URL, json=evaluator_payload)
+    assert response.status_code == 502
+    assert len(mock_router.calls) == 2
+    correction = mock_router.calls[1]["messages"][2]
+    assert correction["role"] == "system"
+    assert "нарушил контракт" in correction["content"]
+    assert "private-fabricated-evidence" not in correction["content"]
+
+
+def test_repair_success_preserves_trust_boundary(
+    client,
+    evaluator_payload,
+    evaluator_result,
+    mock_router,
+):
+    invalid = deepcopy(evaluator_result)
+    invalid["criteria"][0]["evidence"] = ["private-fabricated-evidence"]
+    mock_router.queue(invalid, evaluator_result)
+    response = client.post(URL, json=evaluator_payload)
+    assert response.status_code == 200
+    assert response.json() == evaluator_result
+    assert len(mock_router.calls) == 2
+    messages = mock_router.calls[1]["messages"]
+    assert [message["role"] for message in messages] == ["system", "system", "system", "user"]
+    assert "private-fabricated-evidence" not in messages[2]["content"]
+
+
+def test_evidence_uses_all_candidate_messages(evaluator_payload, evaluator_result):
+    evaluator_payload["dialogue"] = [
+        {"role": "candidate", "content": "Группирует строки."},
+        {"role": "interviewer", "content": "Продолжите."},
+        {"role": "candidate", "content": "KV cache хранит вычисленные ключи и значения"},
+    ]
+    evaluator_result["criteria"][1].update(
+        status="partial", score=2, evidence=["вычисленные ключи и значения"]
+    )
+    validate_evaluation(
+        EvaluatorRequest.model_validate(evaluator_payload),
+        EvaluatorResponse.model_validate(evaluator_result),
+    )
+    evaluator_result["criteria"][1]["evidence"] = ["ключи и значения attention для прошлых токенов"]
+    with pytest.raises(ValueError, match="verbatim"):
+        validate_evaluation(
+            EvaluatorRequest.model_validate(evaluator_payload),
+            EvaluatorResponse.model_validate(evaluator_result),
         )
