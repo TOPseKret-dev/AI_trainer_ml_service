@@ -1,0 +1,47 @@
+name: intersim-ml
+
+services:
+  ml-service:
+    image: ${ML_IMAGE:-intersim-ml:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=${ML_TMPFS_SIZE:-128m},mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3.5-27b}
+      OPENROUTER_PROVIDER: ${OPENROUTER_PROVIDER:-alibaba}
+      OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-55}
+      LLM_REQUEST_TIMEOUT_SECONDS: ${LLM_REQUEST_TIMEOUT_SECONDS:-55}
+      UVICORN_WORKERS: ${ML_WORKERS:-1}
+      UVICORN_LIMIT_CONCURRENCY: ${ML_CONCURRENCY:-32}
+      UVICORN_LOG_LEVEL: ${ML_LOG_LEVEL:-info}
+      UVICORN_TIMEOUT_GRACEFUL_SHUTDOWN: ${ML_SHUTDOWN_TIMEOUT_SECONDS:-60}
+    ports:
+      - "127.0.0.1:${ML_HOST_PORT:-8001}:8001"
+    expose:
+      - "8001"
+    stop_grace_period: ${ML_STOP_GRACE_PERIOD:-75s}
+    cpus: ${ML_CPUS:-1.0}
+    mem_limit: ${ML_MEMORY_LIMIT:-512m}
+    pids_limit: 128
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - intersim_internal
+
+networks:
+  intersim_internal:
+    name: ${ML_NETWORK_NAME:-intersim-ml}

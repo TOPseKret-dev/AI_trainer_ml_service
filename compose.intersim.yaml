@@ -1,0 +1,6 @@
+# Attach to the existing Core Backend network; its lifecycle stays with that stack.
+# Example: INTERSIM_NETWORK=intersim_intersim_internal
+networks:
+  intersim_internal:
+    external: true
+    name: ${INTERSIM_NETWORK:?Set INTERSIM_NETWORK to the existing backend network name}

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Callable
 from time import perf_counter
@@ -6,7 +7,7 @@ from typing import TypeVar
 from pydantic import BaseModel, ValidationError
 
 from app.clients.openrouter import AttemptMetadata, OpenRouterClient
-from app.errors import InvalidProviderResponse
+from app.errors import InvalidProviderResponse, ProviderTimeout
 from app.schemas.common import DialogueMessage
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,31 @@ async def generate_structured(
     temperature: float,
     validate: Callable[[ResponseT], None] | None = None,
 ) -> ResponseT:
+    try:
+        async with asyncio.timeout(client.settings.llm_request_timeout_seconds):
+            return await _generate_attempts(
+                client=client,
+                messages=messages,
+                response_model=response_model,
+                service=service,
+                prompt_version=prompt_version,
+                temperature=temperature,
+                validate=validate,
+            )
+    except TimeoutError:
+        raise ProviderTimeout() from None
+
+
+async def _generate_attempts(
+    *,
+    client: OpenRouterClient,
+    messages: list[dict[str, str]],
+    response_model: type[ResponseT],
+    service: str,
+    prompt_version: str,
+    temperature: float,
+    validate: Callable[[ResponseT], None] | None,
+) -> ResponseT:
     for attempt in (1, 2):
         started = perf_counter()
         metadata = AttemptMetadata()
@@ -61,6 +87,9 @@ async def generate_structured(
             outcome = "success"
             failure = "none"
             return result
+        except asyncio.CancelledError:
+            failure = "cancelled"
+            raise
         except (ValidationError, DomainViolation) as exc:
             failure = "invalid_structured_output"
             if attempt == 2:

@@ -1,1 +1,1 @@
-"""Deterministic inference stubs; replace implementations without changing HTTP routes."""
+"""Inference orchestration, domain validation, and provisional service stubs."""

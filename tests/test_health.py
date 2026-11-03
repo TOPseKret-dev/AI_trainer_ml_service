@@ -13,13 +13,15 @@ def test_openapi_has_all_endpoints_and_response_contracts(client):
     schema = response.json()
     assert set(schema["paths"]) == {
         "/health",
+        "/health/live",
+        "/health/ready",
         "/api/v1/transcriptions",
         "/api/v1/interviewer",
         "/api/v1/evaluator",
         "/api/v1/question-bank/generate",
     }
     for path, operations in schema["paths"].items():
-        method = "get" if path == "/health" else "post"
+        method = "get" if path.startswith("/health") else "post"
         assert "schema" in operations[method]["responses"]["200"]["content"]["application/json"]
     evaluation_schema = schema["components"]["schemas"]["CriterionEvaluation"]
     assert "comment" in evaluation_schema["properties"]
@@ -30,6 +32,26 @@ def test_openapi_has_all_endpoints_and_response_contracts(client):
 def test_documentation_pages(client):
     for path in ("/docs", "/redoc"):
         assert client.get(path).status_code == 200
+
+
+def test_readiness_checks_configuration_without_calling_provider(client, mock_router):
+    assert client.get("/health/live").json() == {"status": "ok", "service": "ml-service"}
+    response = client.get("/health/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "service": "ml-service"}
+    assert mock_router.calls == []
+
+
+def test_readiness_without_key_does_not_break_liveness(client, mock_router):
+    from pydantic import SecretStr
+
+    mock_router.client.settings.openrouter_api_key = SecretStr("")
+    response = client.get("/health/ready")
+    assert response.status_code == 503
+    assert response.json() == {"detail": "OPENROUTER_API_KEY is not configured"}
+    assert client.get("/health").status_code == 200
+    assert client.get("/health/live").status_code == 200
+    assert mock_router.calls == []
 
 
 def test_logs_show_outcome_duration_without_request_content(client, interviewer_payload, caplog):

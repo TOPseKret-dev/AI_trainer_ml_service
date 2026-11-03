@@ -1,4 +1,6 @@
 .venv/
+.venv-*/
+.envrc
 .idea/
 .env
 .env.*
@@ -17,5 +19,7 @@ build/
 *.swp
 *~
 .DS_Store
+.vscode/
+artifacts/
 .secrets/
 credentials*.json

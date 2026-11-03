@@ -1,0 +1,8 @@
+# Keep the build context limited to the runtime source and its dependency lock.
+**
+!Dockerfile
+!requirements.lock
+!app/
+!app/**
+app/**/__pycache__/
+app/**/*.py[cod]

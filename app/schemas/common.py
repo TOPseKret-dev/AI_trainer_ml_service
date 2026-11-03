@@ -26,6 +26,11 @@ class HealthResponse(StrictModel):
     service: Literal["ml-service"]
 
 
+class ReadinessResponse(StrictModel):
+    status: Literal["ready"]
+    service: Literal["ml-service"]
+
+
 class DialogueMessage(StrictModel):
     role: Literal["candidate", "interviewer"]
     content: NonEmptyString

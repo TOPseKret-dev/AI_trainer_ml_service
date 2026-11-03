@@ -13,3 +13,4 @@ class Settings(BaseSettings):
     openrouter_model: Literal["qwen/qwen3.5-27b"] = "qwen/qwen3.5-27b"
     openrouter_provider: Literal["alibaba"] = "alibaba"
     openrouter_timeout_seconds: float = Field(default=55, gt=0, allow_inf_nan=False)
+    llm_request_timeout_seconds: float = Field(default=55, gt=0, allow_inf_nan=False)
