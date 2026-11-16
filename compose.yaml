@@ -16,6 +16,7 @@ services:
     security_opt:
       - no-new-privileges:true
     environment:
+      ASR_GROQ_API_KEY: ${ASR_GROQ_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Set OPENROUTER_API_KEY in .env}
       OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-qwen/qwen3.5-27b}

@@ -7,7 +7,7 @@ Core Backend передаёт контекст вопроса и диалог; M
 | --- | --- |
 | Interviewer | OpenRouter, решение `follow_up / complete` |
 | Evaluator | OpenRouter, оценка по anchors и проверка evidence |
-| Transcription | Детерминированная заглушка, ASR ещё не подключён |
+| Transcription | Groq Whisper large-v3-turbo, WebM/Opus |
 | Question bank generation | Детерминированные черновики `[STUB]` |
 
 Историю, авторизацию, публикацию вопросов и итоговый взвешенный score ведёт Core Backend.
@@ -69,3 +69,7 @@ docker compose -f compose.yaml -f compose.intersim.yaml up -d --build --wait
 CI повторяет проверки из lock-файла, собирает образ, запускает Compose и выполняет
 smoke без платных LLM-вызовов. Реальные integration-тесты запускаются отдельно:
 `.venv/bin/python -m pytest -m integration`.
+
+## ASR
+
+Groq transcription setup and contract: [docs/asr.md](docs/asr.md).

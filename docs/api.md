@@ -9,7 +9,7 @@
 | GET | `/health` | Проверка работоспособности |
 | GET | `/health/live` | Liveness, аналог `/health` |
 | GET | `/health/ready` | Готовность локальной конфигурации LLM, без inference |
-| POST | `/api/v1/transcriptions` | Audio → stub text, provisional |
+| POST | `/api/v1/transcriptions` | Groq ASR; see [ASR contract](asr.md) |
 | POST | `/api/v1/interviewer` | Решение об уточнении или завершении |
 | POST | `/api/v1/evaluator` | LLM-оценка каждого входного критерия |
 | POST | `/api/v1/question-bank/generate` | Генерация черновиков, provisional |
@@ -65,30 +65,11 @@ Readiness: `GET /health/ready` → `{"status":"ready","service":"ml-service"}`.
 Upstream response наружу не передаётся. Собственные ошибки Uvicorn могут иметь
 текстовое тело; Core должен проверять HTTP status до разбора JSON.
 
-### Transcription — PROVISIONAL CONTRACT
+### Transcription
 
-```bash
-curl -X POST \
-  -F "file=@sample.webm;type=audio/webm" \
-  -F "language=ru" \
-  http://127.0.0.1:8001/api/v1/transcriptions
-```
-
-`file` обязателен; `language` по умолчанию `ru`. Если Content-Type части файла
-указан, он должен начинаться с `audio/`. Указание `type=audio/webm` в curl
-исключает автоматическую отправку `application/octet-stream`.
-Кодек не проверяется, ограничения размера в байтах нет. Продуктовый лимит
-длительности и инфраструктурные ограничения требуют отдельного согласования.
-Отсутствующий файл → 422; пустой файл или non-audio Content-Type → 400.
-
-```json
-{
-  "text": "stub transcription",
-  "language": "ru",
-  "duration_seconds": null,
-  "confidence": null
-}
-```
+See [ASR API, configuration and limitations](asr.md). This endpoint uses the
+`error.code/message/details` envelope; the legacy `detail` format above applies
+to the other ML endpoints.
 
 ### Interviewer
 

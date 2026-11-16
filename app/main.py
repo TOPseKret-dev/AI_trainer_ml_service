@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.api.routes.health import router as health_router
+from app.asr_admission import AsrAdmission
 from app.clients.openrouter import OpenRouterClient
 from app.errors import MLServiceError
 from app.settings import Settings
@@ -27,7 +28,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="InterSim ML Service",
     version="0.1.0",
-    description="OpenRouter interviewer/evaluator; transcription and question bank are stubs.",
+    description="OpenRouter interviewer/evaluator; Groq ASR; question bank is a stub.",
     lifespan=lifespan,
 )
 
@@ -61,3 +62,5 @@ async def log_request(request: Request, call_next) -> Response:
 
 app.include_router(health_router)
 app.include_router(api_router, prefix="/api/v1")
+
+app.add_middleware(AsrAdmission)

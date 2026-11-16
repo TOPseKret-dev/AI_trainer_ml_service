@@ -19,6 +19,11 @@ RUN python -m venv /opt/venv \
 
 FROM base AS runtime
 
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get -o Acquire::Retries=3 update \
+    && apt-get -o Acquire::Retries=3 install -y --no-install-recommends ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --gid 1000 appuser \
     && useradd --uid 1000 --gid appuser --no-log-init --create-home appuser
 
