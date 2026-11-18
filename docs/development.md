@@ -6,6 +6,15 @@
 сформированы для этого окружения. Исходный проект допускает Python >= 3.11;
 на других платформах при необходимости разрешайте зависимости из pyproject.toml.
 
+Для полного набора существующих ASR-тестов нужен системный FFmpeg. На Ubuntu/Debian:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y --no-install-recommends ffmpeg
+```
+
+В Docker FFmpeg уже включён в runtime-образ; CI устанавливает его перед pytest.
+
 ```bash
 python3.12 -m venv .venv
 .venv/bin/python -m pip install --require-hashes -r requirements-dev.lock
