@@ -62,9 +62,19 @@ jobs:
         run: |
           docker compose exec -T ml-service python -c "import os; from pathlib import Path; assert os.getuid() == 1000; assert not Path('/app/.env').exists(); assert not Path('/app/tests').exists()"
           test "$(docker inspect --format '{{.HostConfig.ReadonlyRootfs}}' "$(docker compose ps -q ml-service)")" = true
+      - name: Check generation catalog and private persistent state
+        run: >-
+          docker compose exec -T ml-service python -c
+          "import os,stat; from pathlib import Path;
+          from app.question_generation.contracts import GenerationRequest;
+          from app.question_generation.service import context_materials;
+          assert context_materials(GenerationRequest(area='sql',grade='Middle'));
+          p=Path('/var/lib/intersim/question-generation');
+          assert p.stat().st_uid == 1000 and stat.S_IMODE(p.stat().st_mode) == 448;
+          f=p/'.ci-volume-probe'; f.write_text('private'); f.unlink()"
       - name: Show container diagnostics on failure
         if: failure()
         run: docker compose logs --no-color --tail 100 ml-service
       - name: Stop test containers
         if: always()
-        run: docker compose down --remove-orphans
+        run: docker compose down --remove-orphans --volumes

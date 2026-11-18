@@ -12,8 +12,9 @@
 ## Что нужно на сервере
 
 Linux с Docker Engine и Docker Compose >= 2.20; доступ к Docker Hub/PyPI при сборке
-и исходящий HTTPS к OpenRouter при работе. PostgreSQL, Redis, GPU и постоянные
-тома этому сервису не нужны. Docker для Ubuntu устанавливается по
+и исходящий HTTPS к OpenRouter при работе. PostgreSQL, Redis и GPU не нужны.
+Автономный генератор использует локальный постоянный volume для приватных
+журналов; Interviewer/Evaluator остаются stateless. Docker для Ubuntu устанавливается по
 [официальной инструкции](https://docs.docker.com/engine/install/ubuntu/).
 
 Python 3.12 и зависимости находятся внутри образа. Базовый образ закреплён digest,
@@ -61,6 +62,12 @@ Compose читает `.env` для подстановок, но передаёт
 | `OPENROUTER_PROVIDER` | `alibaba` | Закреплённый провайдер, fallback отключён |
 | `OPENROUTER_TIMEOUT_SECONDS` | `55` | Таймаут отдельных HTTP-операций |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `55` | Общий бюджет LLM, включая один repair |
+| `QUESTIONGEN_API_KEY` | пусто | Отдельный ключ генератора; пусто → OPENROUTER_API_KEY |
+| `QUESTIONGEN_STATE_DIR` | в Compose задаётся volume path | Приватные журналы; не помещать в /tmp |
+| `QUESTIONGEN_MAX_CONCURRENT` | `1` | Генераций на общий каталог одного Linux-host |
+| `QUESTIONGEN_POLICY__MAX_COST_USD` | `1.0` | Лимит USD на пакет с неизвестными резервами |
+| `QUESTIONGEN_POLICY__DEADLINE_SECONDS` | `900` | Общий бюджет генератора, отдельный от MI-007 |
+| `QUESTIONGEN_POLICY__CALL_TIMEOUT_SECONDS` | `90` | Таймаут одного вызова генератора |
 | `ML_IMAGE` | `intersim-ml:local` | Имя образа для сборки или запуска |
 | `ML_HOST_PORT` | `8001` | Порт на loopback сервера; внутри всегда `8001` |
 | `ML_WORKERS` | `1` | Число Uvicorn workers |
@@ -90,6 +97,12 @@ CPU, память, concurrency и `/tmp` — стартовые эксплуат
 `deadline_at` от Core может уменьшить бюджет; сервис оставляет 5 секунд резерва.
 Для Interviewer/Evaluator ошибки возвращаются как `error.code/message/details`
 с best-effort meta; полный каталог находится в [HTTP API](api.md).
+
+У генератора отдельные модели, HTTP timeout Core 960 с и persistent volume
+`questiongen_state`, см. [контракт и эксплуатацию](question-generation.md).
+Эти лимиты не увеличивают 55-секундный бюджет Interviewer/Evaluator.
+Каталог /var/lib/intersim/question-generation доступен UID 1000, mode 0700.
+Образы включают catalog.json; базовая файловая система остаётся read-only.
 
 ## Здоровье и диагностика
 
@@ -140,7 +153,9 @@ python3 scripts/smoke.py
 
 Перед обновлением сохраните имя предыдущего образа. Для отката укажите его в
 `ML_IMAGE` и выполните `docker compose up -d --no-build --wait`. Повторная сборка
-для отката не нужна. Сервис stateless; миграций БД у него нет. При одном экземпляре
+для отката не нужна. Миграций БД у ML нет; сохраняйте volume генератора.
+Перед обновлением завершайте генерации либо восстанавливайте их тем же UUID
+с совместимой policy/prompt_version. При одном экземпляре
 пересоздание контейнера создаёт краткий перерыв обслуживания.
 
 Для доставки готового образа можно использовать приватный registry:
@@ -167,6 +182,8 @@ docker compose down
 
 При интеграции добавляйте `-f compose.yaml -f compose.intersim.yaml`.
 Общая external network принадлежит Core-стеку и при `down` ML-сервиса сохраняется.
-Постоянных данных и томов в этом Compose нет. Контейнер работает под UID/GID 1000,
+Volume questiongen_state сохраняется при обычном down. Не используйте down -v
+для обновления: потеря журналов снимает защиту от повторной оплаты генерации.
+Контейнер работает под UID/GID 1000,
 с read-only root filesystem, отдельным `/tmp`, без Linux capabilities и без
 возможности повысить привилегии.

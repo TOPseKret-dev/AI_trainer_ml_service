@@ -1,0 +1,11 @@
+{
+  "request_id": "b74ecff4-f1c3-4918-8d23-04a6425e330a",
+  "specialization": "analytics",
+  "area": "sql",
+  "grade": "Middle",
+  "count": 1,
+  "comment": "Один узкий вопрос о COUNT и NULL в PostgreSQL, без сложной схемы таблиц.",
+  "existing_questions": [],
+  "bank_context_complete": true,
+  "materials": []
+}

@@ -42,14 +42,20 @@ PyCharm: interpreter `.venv/bin/python`, target Module `uvicorn`, parameters
 
 Обычный pytest исключает marker `integration`, даже если ключ есть в environment
 или `.env`. HTTP transport заменяется MockTransport; реального inference нет.
-Три платных smoke-теста запускаются только явно:
+Платные smoke-тесты запускаются только явно:
 
 ```bash
 .venv/bin/python -m pytest -m integration
 ```
 
-Они требуют ключа и выполняют до шести inference calls с учётом repair:
-follow-up, завершение вопроса через complete/null и оценка ответа.
+Три runtime-теста выполняют до шести inference calls с учётом repair:
+follow-up, завершение вопроса через complete/null и оценка ответа. Четвёртый
+тест нового генератора выполняет один пакет из одного вопроса с бюджетом $0.35
+и отдельным временным журналом. Его можно запустить отдельно:
+
+```bash
+.venv/bin/python -m pytest -m integration tests/test_question_generation_live.py
+```
 Структурная валидация и mock-тесты не измеряют качество реальной модели,
 нейтральность follow-up или устойчивость к prompt injection. Для этих свойств
 нужен отдельный контрольный набор и реальные прогоны.
@@ -92,6 +98,10 @@ readiness, OpenAPI и жёсткий лимит Interviewer. Этот smoke не
 - `app/clients/openrouter.py` — транспорт, provider routing, JSON object mode, usage.
 - `app/prompts` — версии и полные тексты инструкций Interviewer/Evaluator.
 - `app/settings.py` — environment и локальный `.env`; ключ представлен `SecretStr`.
+- `app/question_generation` — самостоятельный движок черновиков, каталог, review,
+  резервирование расходов и атомарные журналы.
+- `app/services/question_generation.py` и `app/question_generation_http.py` —
+  HTTP-граница, безопасные ошибки, admission и отмена при disconnect.
 
 Общий httpx.AsyncClient создаётся в lifespan и закрывается при остановке.
 Два system messages содержат инструкции и trusted configuration. Dialogue
@@ -113,7 +123,8 @@ system-инструкция с полной JSON Schema предметного �
 Схему результата и предметные связи проверяет Python до ответа Backend.
 Поля meta/error остаются ответственностью сервиса и не запрашиваются у модели.
 
-Четыре схемы в корне генерируются `python -m app.contracts`; флаг `--check`
+Шесть схем в корне (четыре MI-007 и две генератора) генерируются
+`python -m app.contracts`; флаг `--check`
 проверяет отсутствие расхождений. Снимки схем коммитятся вместе с моделями.
 JSON Schema validator установлен только в dev lock. Каждый HTTP-ответ двух
 маршрутов в обычных тестах проверяется по опубликованной output schema.

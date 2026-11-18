@@ -1,0 +1,113 @@
+{
+  "schema_version": "1.0",
+  "job_id": "b74ecff4-f1c3-4918-8d23-04a6425e330a",
+  "status": "completed",
+  "questions": [
+    {
+      "text": "PostgreSQL. Дана таблица orders(order_id int primary key, customer_id int NULL), в ней 6 строк. Значения customer_id: 10, 10, 20, NULL, NULL, 30. Напишите один запрос, который возвращает три числа: число строк, число строк с известным customer_id и число уникальных известных клиентов. Назовите ожидаемый результат и объясните, почему три числа различаются. Затем ответьте: что вернут эти три выражения, если в таблице нет ни одной строки, и что изменится, если все значения customer_id равны NULL?",
+      "skills": [
+        "Различение COUNT(*), COUNT(column) и COUNT(DISTINCT column) при наличии NULL",
+        "Объяснение причин расхождения результатов агрегатов в PostgreSQL",
+        "Прогноз результатов COUNT на пустой таблице и на столбце только из NULL"
+      ],
+      "criteria": [
+        {
+          "id": "count_null_semantics",
+          "description": "Семантика COUNT при наличии NULL",
+          "grade_configs": [
+            {
+              "grade": "Middle",
+              "weight": 1.0,
+              "anchors": [
+                {
+                  "score": 0,
+                  "description": "Нет ни одного корректно раскрытого существенного элемента требований уровня 2: ответ отсутствует, не относится к критерию или полностью неверен."
+                },
+                {
+                  "score": 1,
+                  "description": "Есть хотя бы один корректный существенный элемент, относящийся к критерию, однако ответ не достигает требований полного балла: часть обязательного обоснования отсутствует или содержит содержательную ошибку."
+                },
+                {
+                  "score": 2,
+                  "description": "Запрос содержит COUNT(*), COUNT(customer_id) и COUNT(DISTINCT customer_id) над orders; названы результаты 6, 4 и 3; объяснено, что COUNT(*) считает все строки, а COUNT(column) игнорирует NULL, и DISTINCT дополнительно убирает повторы среди не-NULL."
+                }
+              ]
+            },
+            {
+              "grade": "Senior",
+              "weight": 1.0,
+              "anchors": [
+                {
+                  "score": 0,
+                  "description": "Нет ни одного корректно раскрытого существенного элемента требований уровня 2: ответ отсутствует, не относится к критерию или полностью неверен."
+                },
+                {
+                  "score": 1,
+                  "description": "Есть хотя бы один корректный существенный элемент, относящийся к критерию, однако ответ не достигает требований полного балла: часть обязательного обоснования отсутствует или содержит содержательную ошибку."
+                },
+                {
+                  "score": 2,
+                  "description": "Запрос содержит COUNT(*), COUNT(customer_id) и COUNT(DISTINCT customer_id); названы результаты 6, 4 и 3; объяснено, что COUNT(column) и DISTINCT не учитывают NULL, а COUNT(*) считает строки. Для пустой таблицы все три выражения дают 0 (одна строка результата, не пустой набор), для столбца только из NULL: 6, 0, 0."
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "grade_configs": [
+        {
+          "grade": "Middle",
+          "reference_answer": "SELECT COUNT(*) AS total_rows, COUNT(customer_id) AS known_customer_rows, COUNT(DISTINCT customer_id) AS distinct_customers FROM orders; Результат: 6, 4, 3. COUNT(*) считает все строки, включая те, где customer_id NULL. COUNT(customer_id) считает только строки с не-NULL значением: 10, 10, 20, 30, то есть 4. COUNT(DISTINCT customer_id) считает уникальные не-NULL значения: 10, 20, 30, то есть 3."
+        },
+        {
+          "grade": "Senior",
+          "reference_answer": "SELECT COUNT(*) AS total_rows, COUNT(customer_id) AS known_customer_rows, COUNT(DISTINCT customer_id) AS distinct_customers FROM orders; Результат: 6, 4, 3. COUNT(*) считает строки независимо от значений столбцов. COUNT(customer_id) пропускает NULL, поэтому учитывает 10, 10, 20, 30. COUNT(DISTINCT customer_id) тоже пропускает NULL и убирает дубль 10, остаются 10, 20, 30. Агрегат без GROUP BY всегда возвращает одну строку: на пустой таблице результат 0, 0, 0 (COUNT возвращает 0, а не NULL). Если все customer_id равны NULL при 6 строках, результат 6, 0, 0."
+        }
+      ],
+      "id": "3b41019e-16ff-5f8a-a662-1977c801a8a6",
+      "specialization": "analytics",
+      "area": "sql",
+      "min_grade": "Middle",
+      "grades": [
+        "Middle",
+        "Senior"
+      ],
+      "status": "draft",
+      "generation": {
+        "source": "model_generated",
+        "comment": "Один узкий вопрос о COUNT и NULL в PostgreSQL, без сложной схемы таблиц.",
+        "model": "anthropic/claude-sonnet-5.5",
+        "reviewer_model": "openai/gpt-5.6-luna",
+        "prompt_version": "autonomous-2.1",
+        "plan_target": "Проверить, что кандидат различает COUNT(*), COUNT(column) и COUNT(DISTINCT column) на одной таблице с NULL в PostgreSQL и объясняет, почему результаты расходятся.",
+        "material_ids": [
+          "matrix:sql_practice",
+          "matrix:sql_core",
+          "matrix:sql_optimization"
+        ],
+        "quality_status": "passed",
+        "review": {
+          "checks": {
+            "factual_correctness": true,
+            "scope_alignment": true,
+            "grade_fit": true,
+            "rubric_alignment": true,
+            "reference_completeness": true,
+            "distinctness": true
+          },
+          "defects": [],
+          "summary": "Комплект корректен: задача узко проверяет семантику COUNT в PostgreSQL на одной явно заданной таблице, результаты и эталоны верны. Критерий и anchors однозначно различают частичный и полный ответ для Middle и Senior; Senior дополнительно проверяет пустую таблицу и столбец, состоящий только из NULL. Ограничения области соблюдены, смысловых дублей среди существующих вопросов нет."
+        },
+        "distinctness_review": null
+      }
+    }
+  ],
+  "rejected_candidates": [],
+  "warnings": [],
+  "metrics": {
+    "calls": 3,
+    "cost_usd": 0.028031,
+    "reserved_uncertain_usd": 0.0,
+    "elapsed_seconds": 21.038
+  }
+}

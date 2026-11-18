@@ -19,6 +19,7 @@ def test_openapi_has_all_endpoints_and_response_contracts(client):
         "/api/v1/interviewer",
         "/api/v1/evaluator",
         "/api/v1/question-bank/generate",
+        "/api/v1/question-generation",
     }
     for path, operations in schema["paths"].items():
         method = "get" if path.startswith("/health") else "post"

@@ -1,0 +1,741 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Question generation HTTP contract v1",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/QuestionGenerationResponse"
+    },
+    {
+      "$ref": "#/$defs/QuestionGenerationErrorResponse"
+    }
+  ],
+  "$defs": {
+    "Anchor": {
+      "additionalProperties": false,
+      "properties": {
+        "score": {
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        },
+        "description": {
+          "maxLength": 1500,
+          "minLength": 5,
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "score",
+        "description"
+      ],
+      "title": "Anchor",
+      "type": "object"
+    },
+    "Candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 2000,
+          "minLength": 20,
+          "title": "Text",
+          "type": "string"
+        },
+        "skills": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Skills",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "$ref": "#/$defs/Criterion"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "grade_configs": {
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Grade Configs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text",
+        "skills",
+        "criteria",
+        "grade_configs"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "Criterion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9_]{0,47}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 500,
+          "minLength": 10,
+          "title": "Description",
+          "type": "string"
+        },
+        "grade_configs": {
+          "items": {
+            "$ref": "#/$defs/CriterionGradeConfig"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Grade Configs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "description",
+        "grade_configs"
+      ],
+      "title": "Criterion",
+      "type": "object"
+    },
+    "CriterionGradeConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "grade": {
+          "enum": [
+            "Junior",
+            "Middle",
+            "Senior"
+          ],
+          "title": "Grade",
+          "type": "string"
+        },
+        "weight": {
+          "exclusiveMinimum": 0,
+          "maximum": 10,
+          "title": "Weight",
+          "type": "number"
+        },
+        "anchors": {
+          "items": {
+            "$ref": "#/$defs/Anchor"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "title": "Anchors",
+          "type": "array"
+        }
+      },
+      "required": [
+        "grade",
+        "weight",
+        "anchors"
+      ],
+      "title": "CriterionGradeConfig",
+      "type": "object"
+    },
+    "Defect": {
+      "additionalProperties": false,
+      "properties": {
+        "severity": {
+          "enum": [
+            "minor",
+            "major",
+            "critical"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "path": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "explanation": {
+          "maxLength": 1500,
+          "minLength": 1,
+          "title": "Explanation",
+          "type": "string"
+        },
+        "required_change": {
+          "maxLength": 1500,
+          "minLength": 1,
+          "title": "Required Change",
+          "type": "string"
+        }
+      },
+      "required": [
+        "severity",
+        "path",
+        "explanation",
+        "required_change"
+      ],
+      "title": "Defect",
+      "type": "object"
+    },
+    "DraftQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "text": {
+          "maxLength": 2000,
+          "minLength": 20,
+          "title": "Text",
+          "type": "string"
+        },
+        "skills": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Skills",
+          "type": "array"
+        },
+        "criteria": {
+          "items": {
+            "$ref": "#/$defs/Criterion"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array"
+        },
+        "grade_configs": {
+          "items": {
+            "$ref": "#/$defs/Reference"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Grade Configs",
+          "type": "array"
+        },
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "specialization": {
+          "const": "analytics",
+          "default": "analytics",
+          "title": "Specialization",
+          "type": "string"
+        },
+        "area": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Area",
+          "type": "string"
+        },
+        "min_grade": {
+          "enum": [
+            "Junior",
+            "Middle",
+            "Senior"
+          ],
+          "title": "Min Grade",
+          "type": "string"
+        },
+        "grades": {
+          "items": {
+            "enum": [
+              "Junior",
+              "Middle",
+              "Senior"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "Grades",
+          "type": "array"
+        },
+        "status": {
+          "const": "draft",
+          "default": "draft",
+          "title": "Status",
+          "type": "string"
+        },
+        "generation": {
+          "$ref": "#/$defs/Metadata"
+        }
+      },
+      "required": [
+        "text",
+        "skills",
+        "criteria",
+        "grade_configs",
+        "id",
+        "area",
+        "min_grade",
+        "grades",
+        "generation"
+      ],
+      "title": "DraftQuestion",
+      "type": "object"
+    },
+    "Metadata": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "const": "model_generated",
+          "default": "model_generated",
+          "title": "Source",
+          "type": "string"
+        },
+        "comment": {
+          "maxLength": 500,
+          "title": "Comment",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "reviewer_model": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Reviewer Model",
+          "type": "string"
+        },
+        "prompt_version": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "plan_target": {
+          "anyOf": [
+            {
+              "maxLength": 600,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Plan Target"
+        },
+        "material_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 40,
+          "title": "Material Ids",
+          "type": "array"
+        },
+        "quality_status": {
+          "const": "passed",
+          "default": "passed",
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "review": {
+          "$ref": "#/$defs/Review"
+        },
+        "distinctness_review": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Review"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "comment",
+        "model",
+        "reviewer_model",
+        "prompt_version",
+        "material_ids",
+        "review"
+      ],
+      "title": "Metadata",
+      "type": "object"
+    },
+    "Metrics": {
+      "additionalProperties": false,
+      "properties": {
+        "calls": {
+          "minimum": 0,
+          "title": "Calls",
+          "type": "integer"
+        },
+        "cost_usd": {
+          "minimum": 0,
+          "title": "Cost Usd",
+          "type": "number"
+        },
+        "reserved_uncertain_usd": {
+          "minimum": 0,
+          "title": "Reserved Uncertain Usd",
+          "type": "number"
+        },
+        "elapsed_seconds": {
+          "minimum": 0,
+          "title": "Elapsed Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "calls",
+        "cost_usd",
+        "reserved_uncertain_usd",
+        "elapsed_seconds"
+      ],
+      "title": "Metrics",
+      "type": "object"
+    },
+    "Reference": {
+      "additionalProperties": false,
+      "properties": {
+        "grade": {
+          "enum": [
+            "Junior",
+            "Middle",
+            "Senior"
+          ],
+          "title": "Grade",
+          "type": "string"
+        },
+        "reference_answer": {
+          "maxLength": 10000,
+          "minLength": 30,
+          "title": "Reference Answer",
+          "type": "string"
+        }
+      },
+      "required": [
+        "grade",
+        "reference_answer"
+      ],
+      "title": "Reference",
+      "type": "object"
+    },
+    "RejectedCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "$ref": "#/$defs/Candidate"
+        },
+        "issues": {
+          "items": {
+            "$ref": "#/$defs/Defect"
+          },
+          "maxItems": 20,
+          "title": "Issues",
+          "type": "array"
+        },
+        "quality_status": {
+          "enum": [
+            "needs_revision",
+            "unverified"
+          ],
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "slot": {
+          "minimum": 0,
+          "title": "Slot",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "candidate",
+        "issues",
+        "quality_status",
+        "slot"
+      ],
+      "title": "RejectedCandidate",
+      "type": "object"
+    },
+    "Review": {
+      "additionalProperties": false,
+      "properties": {
+        "checks": {
+          "$ref": "#/$defs/ReviewChecks"
+        },
+        "defects": {
+          "items": {
+            "$ref": "#/$defs/Defect"
+          },
+          "maxItems": 20,
+          "title": "Defects",
+          "type": "array"
+        },
+        "summary": {
+          "maxLength": 1500,
+          "minLength": 1,
+          "title": "Summary",
+          "type": "string"
+        }
+      },
+      "required": [
+        "checks",
+        "defects",
+        "summary"
+      ],
+      "title": "Review",
+      "type": "object"
+    },
+    "ReviewChecks": {
+      "additionalProperties": false,
+      "properties": {
+        "factual_correctness": {
+          "title": "Factual Correctness",
+          "type": "boolean"
+        },
+        "scope_alignment": {
+          "title": "Scope Alignment",
+          "type": "boolean"
+        },
+        "grade_fit": {
+          "title": "Grade Fit",
+          "type": "boolean"
+        },
+        "rubric_alignment": {
+          "title": "Rubric Alignment",
+          "type": "boolean"
+        },
+        "reference_completeness": {
+          "title": "Reference Completeness",
+          "type": "boolean"
+        },
+        "distinctness": {
+          "title": "Distinctness",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "factual_correctness",
+        "scope_alignment",
+        "grade_fit",
+        "rubric_alignment",
+        "reference_completeness",
+        "distinctness"
+      ],
+      "title": "ReviewChecks",
+      "type": "object"
+    },
+    "Warning": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Code",
+          "type": "string"
+        },
+        "message": {
+          "maxLength": 1500,
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        },
+        "slot": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Slot"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "Warning",
+      "type": "object"
+    },
+    "QuestionGenerationResponse": {
+      "additionalProperties": false,
+      "description": "Terminal generation result; failed/partial are explicit business outcomes.",
+      "properties": {
+        "schema_version": {
+          "const": "1.0",
+          "default": "1.0",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "job_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Job Id",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "partial",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "questions": {
+          "items": {
+            "$ref": "#/$defs/DraftQuestion"
+          },
+          "maxItems": 10,
+          "title": "Questions",
+          "type": "array"
+        },
+        "rejected_candidates": {
+          "items": {
+            "$ref": "#/$defs/RejectedCandidate"
+          },
+          "title": "Rejected Candidates",
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "$ref": "#/$defs/Warning"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "metrics": {
+          "$ref": "#/$defs/Metrics"
+        }
+      },
+      "required": [
+        "job_id",
+        "status",
+        "questions",
+        "rejected_candidates",
+        "warnings",
+        "metrics"
+      ],
+      "title": "QuestionGenerationResponse",
+      "type": "object"
+    },
+    "QuestionGenerationErrorBody": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/QuestionGenerationErrorCode"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "details": {
+          "$ref": "#/$defs/QuestionGenerationErrorDetails"
+        }
+      },
+      "required": [
+        "code",
+        "message",
+        "details"
+      ],
+      "title": "QuestionGenerationErrorBody",
+      "type": "object"
+    },
+    "QuestionGenerationErrorCode": {
+      "enum": [
+        "QGEN_INVALID_INPUT",
+        "QGEN_PAYLOAD_TOO_LARGE",
+        "QGEN_UNSUPPORTED_MEDIA_TYPE",
+        "QGEN_REQUEST_TIMEOUT",
+        "QGEN_IDEMPOTENCY_CONFLICT",
+        "QGEN_JOB_BUSY",
+        "QGEN_CAPACITY_EXCEEDED",
+        "QGEN_PROVIDER_NOT_CONFIGURED",
+        "QGEN_STORAGE_UNAVAILABLE",
+        "QGEN_INTERNAL_ERROR"
+      ],
+      "title": "QuestionGenerationErrorCode",
+      "type": "string"
+    },
+    "QuestionGenerationErrorDetails": {
+      "additionalProperties": false,
+      "properties": {
+        "correlation_id": {
+          "title": "Correlation Id",
+          "type": "string"
+        },
+        "request_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Request Id"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "retry_after_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Retry After Seconds"
+        }
+      },
+      "required": [
+        "correlation_id",
+        "retryable"
+      ],
+      "title": "QuestionGenerationErrorDetails",
+      "type": "object"
+    },
+    "QuestionGenerationErrorResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/QuestionGenerationErrorBody"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "QuestionGenerationErrorResponse",
+      "type": "object"
+    }
+  }
+}

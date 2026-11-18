@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "intersim-ml-service"
 version = "0.2.0"
-description = "Stateless FastAPI ML service with OpenRouter interviewer and evaluator"
+description = "FastAPI ML service with interview runtime, ASR and reviewed draft generation"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -28,6 +28,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["app*"]
+
+[tool.setuptools.package-data]
+"app.question_generation" = ["catalog.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

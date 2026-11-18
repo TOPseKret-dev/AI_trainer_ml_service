@@ -12,7 +12,8 @@ OpenRouter использует JSON object mode с обязательной в�
 | Interviewer | OpenRouter, решение `follow_up / complete` |
 | Evaluator | OpenRouter, оценка по anchors и проверка evidence |
 | Transcription | Groq Whisper large-v3-turbo, WebM/Opus |
-| Question bank generation | Детерминированные черновики `[STUB]` |
+| Question generation | Автономная генерация, независимый review, черновики и журнал восстановления |
+| Legacy question-bank endpoint | Детерминированная заглушка `[STUB]`, прежний формат сохранён |
 
 Историю, авторизацию, публикацию вопросов и итоговый взвешенный score ведёт Core Backend.
 Evaluator возвращает разбор одного основного вопроса с его уточнениями.
@@ -58,6 +59,7 @@ Core должен использовать DTO, ошибки и метаданн
 
 - [Развёртывание, настройки, обновление и откат](docs/deployment.md).
 - [HTTP API и примеры запросов](docs/api.md).
+- [Контракт генерации вопросов для Backend, примеры и эксплуатация](docs/question-generation.md).
 - Канонические JSON Schema v2: `interviewer_input.schema.json`,
   `interviewer_output.schema.json`, `evaluator_input.schema.json`, `evaluator_output.schema.json`.
 - [Связь с другими сервисами и расхождения общих документов](docs/integration.md).
@@ -80,3 +82,12 @@ smoke без платных LLM-вызовов. Реальные integration-т�
 ## ASR
 
 Groq transcription setup and contract: [docs/asr.md](docs/asr.md).
+
+## Генерация вопросов
+
+`POST /api/v1/question-generation` принимает стабильный UUID, область, минимальный
+грейд и компактный контекст банка. Возвращает reviewed drafts, отдельные отклонённые
+кандидаты, предупреждения и стоимость. Core отвечает за административный job,
+добавление в БЗ и публикацию. У генератора отдельные модели и бюджет до 900 с;
+штатные 55 с Interviewer/Evaluator не меняются. Compose сохраняет приватный журнал
+в named volume. [Полный контракт для бэкендера](docs/question-generation.md).

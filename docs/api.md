@@ -13,9 +13,10 @@
 | POST | `/api/v1/evaluator` | Оценка одного вопроса и его уточнений, v2 |
 | POST | `/api/v1/transcriptions` | [Groq ASR](asr.md), отдельный контракт |
 | POST | `/api/v1/question-bank/generate` | Детерминированные черновики, provisional |
+| POST | `/api/v1/question-generation` | [Автономная генерация проверенных черновиков](question-generation.md) |
 
 OpenAPI: `GET /openapi.json`; Swagger UI: `GET /docs`.
-Четыре канонические JSON Schema Draft 2020-12 находятся в корне репозитория:
+Четыре канонические JSON Schema Draft 2020-12 для MI-007 находятся в корне:
 
 - [interviewer_input.schema.json](../interviewer_input.schema.json);
 - [interviewer_output.schema.json](../interviewer_output.schema.json);
@@ -369,7 +370,11 @@ Readiness не проверяет баланс или доступность п�
 Groq ASR сохраняет свой [контракт, настройки и лимиты](asr.md); каталог ML_*
 и поле deadline_at описаны здесь только для Interviewer/Evaluator.
 
-Генерация банка остаётся provisional, без публикации и persistence:
+Новый рабочий генератор имеет отдельный [контракт](question-generation.md),
+схемы `question_generation_input.schema.json` / `question_generation_output.schema.json`
+и endpoint `/api/v1/question-generation`. Его время, retries и журнал отделены от MI-007.
+
+Прежняя заглушка банка сохраняет provisional DTO, без публикации и persistence:
 
 ```bash
 curl -X POST http://127.0.0.1:8001/api/v1/question-bank/generate \
@@ -381,6 +386,6 @@ JSON
 
 Возвращает count черновиков (по умолчанию 10, диапазон 1..50) с явными метками
 [STUB], эталонами и критериями для грейдов от min_grade до senior.
-В генераторе criterion grade_configs включают weight/max_score/expected_level;
+В этой заглушке criterion grade_configs включают weight/max_score/expected_level;
 они не являются входными полями Evaluator v2. Формат ошибок и validation остальных
 маршрутов этой миграцией не изменён.

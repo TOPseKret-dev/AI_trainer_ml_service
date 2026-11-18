@@ -14,6 +14,7 @@ from app.asr_admission import AsrAdmission
 from app.clients.openrouter import OpenRouterClient
 from app.errors import MLErrorCode, MLServiceError
 from app.http_contract import MLContractMiddleware, error_response, get_context
+from app.question_generation_http import QuestionGenerationMiddleware
 from app.settings import Settings
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -25,13 +26,21 @@ async def lifespan(app: FastAPI):
     settings = Settings()
     async with httpx.AsyncClient() as http:
         app.state.openrouter_client = OpenRouterClient(http, settings)
-        yield
+        try:
+            yield
+        finally:
+            # Cached generation service borrows this lifespan's HTTP client.
+            if hasattr(app.state, "question_generation_service"):
+                del app.state.question_generation_service
 
 
 app = FastAPI(
     title="InterSim ML Service",
     version="0.2.0",
-    description="OpenRouter interviewer/evaluator; Groq ASR; question bank is a stub.",
+    description=(
+        "OpenRouter interviewer/evaluator; Groq ASR; autonomous draft question generation. "
+        "The original question-bank stub remains available for compatibility."
+    ),
     lifespan=lifespan,
 )
 
@@ -64,4 +73,5 @@ app.include_router(health_router)
 app.include_router(api_router, prefix="/api/v1")
 
 app.add_middleware(AsrAdmission)
+app.add_middleware(QuestionGenerationMiddleware)
 app.add_middleware(MLContractMiddleware)

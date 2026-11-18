@@ -1,4 +1,4 @@
-"""Generate the four canonical Draft 2020-12 contracts from the runtime models."""
+"""Generate canonical Draft 2020-12 contracts from the runtime models."""
 
 import argparse
 import json
@@ -7,6 +7,11 @@ from pathlib import Path
 from app.schemas.evaluator import EvaluatorRequest, EvaluatorResponse
 from app.schemas.interviewer import InterviewerRequest, InterviewerResponse
 from app.schemas.meta import EvaluatorErrorResponse, InterviewerErrorResponse
+from app.schemas.question_generation import (
+    QuestionGenerationErrorResponse,
+    QuestionGenerationRequest,
+    QuestionGenerationResponse,
+)
 
 DRAFT = "https://json-schema.org/draft/2020-12/schema"
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,7 +21,7 @@ def input_schema(model):
     return {"$schema": DRAFT, **model.model_json_schema(mode="validation")}
 
 
-def output_schema(success, error):
+def output_schema(success, error, *, title=None):
     definitions = {}
     branches = []
     for model, name in (
@@ -29,7 +34,7 @@ def output_schema(success, error):
         branches.append({"$ref": f"#/$defs/{name}"})
     return {
         "$schema": DRAFT,
-        "title": f"{success.__name__} HTTP contract v2",
+        "title": title or f"{success.__name__} HTTP contract v2",
         "oneOf": branches,
         "$defs": definitions,
     }
@@ -43,6 +48,12 @@ def schemas():
         ),
         "evaluator_input.schema.json": input_schema(EvaluatorRequest),
         "evaluator_output.schema.json": output_schema(EvaluatorResponse, EvaluatorErrorResponse),
+        "question_generation_input.schema.json": input_schema(QuestionGenerationRequest),
+        "question_generation_output.schema.json": output_schema(
+            QuestionGenerationResponse,
+            QuestionGenerationErrorResponse,
+            title="Question generation HTTP contract v1",
+        ),
     }
 
 
@@ -57,7 +68,7 @@ def main():
                 raise SystemExit(f"Contract out of date: {name}; run python -m app.contracts")
         else:
             path.write_text(json.dumps(schema, ensure_ascii=False, indent=2) + "\n")
-    print("Four contract schemas are up to date")
+    print(f"{len(schemas())} contract schemas are up to date")
 
 
 if __name__ == "__main__":

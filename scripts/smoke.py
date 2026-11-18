@@ -33,6 +33,7 @@ def check(base_url: str) -> None:
         "/api/v1/evaluator",
         "/api/v1/transcriptions",
         "/api/v1/question-bank/generate",
+        "/api/v1/question-generation",
     }
     if not required.issubset(paths):
         raise ValueError("OpenAPI is missing a required route")
@@ -60,6 +61,17 @@ def check(base_url: str) -> None:
     ):
         raise ValueError("Invalid deterministic-completion metadata")
     print("OK interviewer hard limit and v2 metadata (no inference)")
+
+    # Deliberately invalid input: no generation job or paid request may be started.
+    try:
+        request("/api/v1/question-generation", {})
+    except HTTPError as exc:
+        body = json.load(exc)
+        if exc.code != 422 or body.get("error", {}).get("code") != "QGEN_INVALID_INPUT":
+            raise ValueError("Invalid question-generation validation envelope") from None
+    else:
+        raise ValueError("Missing question-generation fields unexpectedly accepted")
+    print("OK question generation validation (no inference)")
 
 
 def main() -> int:

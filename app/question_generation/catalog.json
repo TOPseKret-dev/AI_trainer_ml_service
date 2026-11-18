@@ -1,0 +1,278 @@
+{
+  "schema_version": "1.0",
+  "specialization": "analyst",
+  "documents": [
+    {
+      "source_id": "dwh",
+      "path": "sources/customer/dwh_analyst.png",
+      "sha256": "b21776c6f272a0a415df68f52af622917cd452758f7bd62a35f69106b8adecb6"
+    },
+    {
+      "source_id": "sql",
+      "path": "sources/customer/sql.png",
+      "sha256": "0c5aebc597ef36f862f4b2192dd131ca235d5ec5a3167ed041293acb99056799"
+    },
+    {
+      "source_id": "etl",
+      "path": "sources/customer/etl.png",
+      "sha256": "bbf7026e2c68a446528fa9b9de7d2a1bbf505e3224901691afffac364dc640e4"
+    }
+  ],
+  "competencies": [
+    {
+      "competency_id": "requirements_gathering",
+      "area": "requirements",
+      "source_refs": [
+        {
+          "source_id": "dwh",
+          "row": 1,
+          "label": "Сбор требований"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Диагностика полноты требований и источников; конкретные навыки спроектированы, не указаны в матрице."
+    },
+    {
+      "competency_id": "requirements_formalization",
+      "area": "requirements",
+      "source_refs": [
+        {
+          "source_id": "dwh",
+          "row": 2,
+          "label": "Формализация требований"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Проверяемые спецификации и критерии приёмки; model-derived конкретизация."
+    },
+    {
+      "competency_id": "integrations",
+      "area": "integration",
+      "source_refs": [
+        {
+          "source_id": "dwh",
+          "row": 3,
+          "label": "Интеграции"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Контракты обмена и обработка изменений; model-derived конкретизация."
+    },
+    {
+      "competency_id": "etl_tools",
+      "area": "etl",
+      "source_refs": [
+        {
+          "source_id": "dwh",
+          "row": 4,
+          "label": "ETL-инструменты"
+        },
+        {
+          "source_id": "etl",
+          "row": 2,
+          "label": "ETL-инструменты"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Выбор/ограничения классов ETL-инструментов без выдуманного обязательного vendor."
+    },
+    {
+      "competency_id": "warehouse",
+      "area": "dwh",
+      "source_refs": [
+        {
+          "source_id": "dwh",
+          "row": 5,
+          "label": "КХД"
+        },
+        {
+          "source_id": "etl",
+          "row": 3,
+          "label": "DWH"
+        }
+      ],
+      "optional": false,
+      "interpretation": "КХД/DWH сведены в одну область; детализация моделирования и загрузки спроектирована."
+    },
+    {
+      "competency_id": "database_families",
+      "area": "databases",
+      "source_refs": [
+        {
+          "source_id": "dwh",
+          "row": 6,
+          "label": "Реляционные и NoSQL СУБД"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Реляционные и NoSQL модели; конкретные сравнения спроектированы."
+    },
+    {
+      "competency_id": "sql_practice",
+      "area": "sql",
+      "source_refs": [
+        {
+          "source_id": "dwh",
+          "row": 7,
+          "label": "Практическая задача SQL"
+        },
+        {
+          "source_id": "sql",
+          "row": 1,
+          "label": "Практическая задача"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Практический SQL; схемы, данные, dialect должны задаваться в вопросе."
+    },
+    {
+      "competency_id": "sql_core",
+      "area": "sql",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 2,
+          "label": "SQL"
+        },
+        {
+          "source_id": "etl",
+          "row": 4,
+          "label": "SQL"
+        }
+      ],
+      "optional": false,
+      "interpretation": "SQL как область; joins, агрегации, NULL — model-derived конкретизация."
+    },
+    {
+      "competency_id": "sql_optimization",
+      "area": "sql",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 3,
+          "label": "Оптимизация"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Диагностика плана и обоснование оптимизации; детализация спроектирована."
+    },
+    {
+      "competency_id": "sybase",
+      "area": "dbms",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 4,
+          "label": "SyBase (дополнительно)"
+        }
+      ],
+      "optional": true,
+      "interpretation": "Дополнительный блок; не навязывать всем аналитикам."
+    },
+    {
+      "competency_id": "ms_sql",
+      "area": "dbms",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 5,
+          "label": "MS SQL"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Microsoft SQL Server; конкретные dialect/engine вопросы спроектированы."
+    },
+    {
+      "competency_id": "oracle_plsql",
+      "area": "dbms",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 6,
+          "label": "Oracle PL/SQL"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Oracle PL/SQL; конкретные навыки спроектированы."
+    },
+    {
+      "competency_id": "postgres",
+      "area": "dbms",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 7,
+          "label": "Postgres SQL"
+        }
+      ],
+      "optional": false,
+      "interpretation": "PostgreSQL; конкретные semantics не даны матрицей."
+    },
+    {
+      "competency_id": "transactions",
+      "area": "databases",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 8,
+          "label": "Транзакции"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Изоляция/атомарность/конкурентность как model-derived конкретизация."
+    },
+    {
+      "competency_id": "database_design",
+      "area": "databases",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 9,
+          "label": "Проектирование баз данных"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Проектирование БД; конкретные задания спроектированы."
+    },
+    {
+      "competency_id": "git",
+      "area": "engineering",
+      "source_refs": [
+        {
+          "source_id": "sql",
+          "row": 10,
+          "label": "Git"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Git явно присутствует в SQL-матрице, не исключать молча."
+    },
+    {
+      "competency_id": "etl_general",
+      "area": "etl",
+      "source_refs": [
+        {
+          "source_id": "etl",
+          "row": 1,
+          "label": "ETL общее"
+        }
+      ],
+      "optional": false,
+      "interpretation": "Надёжность/повторные загрузки/качество данных — model-derived конкретизация."
+    },
+    {
+      "competency_id": "devops_optional",
+      "area": "engineering",
+      "source_refs": [
+        {
+          "source_id": "etl",
+          "row": 5,
+          "label": "DevOps (необязательный блок)"
+        }
+      ],
+      "optional": true,
+      "interpretation": "Необязательный блок матрицы ETL."
+    }
+  ],
+  "progression_provenance": "model_derived"
+}

@@ -37,6 +37,7 @@ Core использует base URL `http://ml-service:8001/`:
 | Evaluator v2 | api/v1/evaluator |
 | Groq ASR, отдельный контракт | api/v1/transcriptions |
 | Черновики банка, provisional | api/v1/question-bank/generate |
+| Автономная генерация, отдельный контракт | api/v1/question-generation |
 
 Frontend обращается к Core. ML доступен доверенным участникам внутренней сети;
 host port привязан к 127.0.0.1. Публичный API Core и CORS фронтенда сюда не входят.
@@ -94,7 +95,7 @@ LLM генерирует только предметный JSON; meta и error �
 
 ## Ошибки, идемпотентность и повтор
 
-ML выполняет максимум один внутренний repair только для EMPTY_RESPONSE,
+Interviewer/Evaluator выполняют максимум один внутренний repair только для EMPTY_RESPONSE,
 OUTPUT_TRUNCATED и SCHEMA_ERROR. Сетевые retry, fallback и очередь LLM отсутствуют.
 Вызовы синхронные, без task ID/polling/retry endpoints ML.
 Все 17 кодов и точные лимиты Backend перечислены в [HTTP API](api.md).
@@ -108,8 +109,8 @@ Auth/quota/config ошибки провайдера возвращаются к�
 
 Ответы уже завершённой/устаревшей операции не применяются к новой версии состояния.
 Повтор HTTP не создаёт новый Answer и не перезаписывает готовый QuestionFeedback.
-Эти правила, persistence и фоновые циклы реализуются в Core; ML хранит только
-контекст текущего HTTP-запроса в памяти.
+Эти правила, persistence и фоновые циклы тренировок реализуются в Core;
+Interviewer/Evaluator хранят только контекст текущего HTTP-запроса в памяти.
 
 ## Проверка совместимости
 
@@ -126,5 +127,8 @@ Smoke проверяет живой процесс и детерминирова
 Старые архивные схемы из docs/reference не заменяют контракт v2.
 
 Groq ASR имеет собственные поля, deadline и error codes:
-[ASR](asr.md). Контракт генератора банка остаётся provisional.
+[ASR](asr.md). Новый генератор вопросов использует отдельный рабочий
+[контракт Backend → ML](question-generation.md): другой HttpClient (960 с),
+стабильный UUID и постоянный журнал; его правила нельзя смешивать с MI-007.
+Старый provisional endpoint заглушки сохранён для совместимости.
 Смена модели, провайдера и промптов для миграции v2 не выполнялась.

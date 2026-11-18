@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ExistingQuestion": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 8000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        },
+        "area": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Area",
+          "type": "string"
+        },
+        "skills": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 10,
+          "title": "Skills",
+          "type": "array"
+        },
+        "min_grade": {
+          "default": "Junior",
+          "enum": [
+            "Junior",
+            "Middle",
+            "Senior"
+          ],
+          "title": "Min Grade",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text",
+        "area"
+      ],
+      "title": "ExistingQuestion",
+      "type": "object"
+    },
+    "Material": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 12000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "Material",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "request_id": {
+      "format": "uuid",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "specialization": {
+      "const": "analytics",
+      "default": "analytics",
+      "title": "Specialization",
+      "type": "string"
+    },
+    "area": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Area",
+      "type": "string"
+    },
+    "grade": {
+      "enum": [
+        "Junior",
+        "Middle",
+        "Senior"
+      ],
+      "title": "Grade",
+      "type": "string"
+    },
+    "count": {
+      "default": 3,
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Count",
+      "type": "integer"
+    },
+    "comment": {
+      "default": "",
+      "maxLength": 500,
+      "title": "Comment",
+      "type": "string"
+    },
+    "existing_questions": {
+      "items": {
+        "$ref": "#/$defs/ExistingQuestion"
+      },
+      "maxItems": 500,
+      "title": "Existing Questions",
+      "type": "array"
+    },
+    "bank_context_complete": {
+      "default": false,
+      "title": "Bank Context Complete",
+      "type": "boolean"
+    },
+    "materials": {
+      "items": {
+        "$ref": "#/$defs/Material"
+      },
+      "maxItems": 20,
+      "title": "Materials",
+      "type": "array"
+    }
+  },
+  "required": [
+    "request_id",
+    "area",
+    "grade"
+  ],
+  "title": "QuestionGenerationRequest",
+  "type": "object"
+}

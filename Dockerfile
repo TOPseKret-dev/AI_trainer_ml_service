@@ -25,7 +25,10 @@ RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.l
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd --gid 1000 appuser \
-    && useradd --uid 1000 --gid appuser --no-log-init --create-home appuser
+    && useradd --uid 1000 --gid appuser --no-log-init --create-home appuser \
+    && mkdir -p /var/lib/intersim/question-generation \
+    && chown 1000:1000 /var/lib/intersim/question-generation \
+    && chmod 700 /var/lib/intersim/question-generation
 
 COPY --from=dependencies /opt/venv /opt/venv
 COPY --chown=1000:1000 app/ /app/app/

@@ -23,6 +23,12 @@ services:
       OPENROUTER_PROVIDER: ${OPENROUTER_PROVIDER:-alibaba}
       OPENROUTER_TIMEOUT_SECONDS: ${OPENROUTER_TIMEOUT_SECONDS:-55}
       LLM_REQUEST_TIMEOUT_SECONDS: ${LLM_REQUEST_TIMEOUT_SECONDS:-55}
+      QUESTIONGEN_STATE_DIR: /var/lib/intersim/question-generation
+      QUESTIONGEN_API_KEY: ${QUESTIONGEN_API_KEY:-}
+      QUESTIONGEN_MAX_CONCURRENT: ${QUESTIONGEN_MAX_CONCURRENT:-1}
+      QUESTIONGEN_POLICY__MAX_COST_USD: ${QUESTIONGEN_POLICY__MAX_COST_USD:-1.0}
+      QUESTIONGEN_POLICY__DEADLINE_SECONDS: ${QUESTIONGEN_POLICY__DEADLINE_SECONDS:-900}
+      QUESTIONGEN_POLICY__CALL_TIMEOUT_SECONDS: ${QUESTIONGEN_POLICY__CALL_TIMEOUT_SECONDS:-90}
       UVICORN_WORKERS: ${ML_WORKERS:-1}
       UVICORN_LIMIT_CONCURRENCY: ${ML_CONCURRENCY:-32}
       UVICORN_LOG_LEVEL: ${ML_LOG_LEVEL:-info}
@@ -31,6 +37,8 @@ services:
       - "127.0.0.1:${ML_HOST_PORT:-8001}:8001"
     expose:
       - "8001"
+    volumes:
+      - questiongen_state:/var/lib/intersim/question-generation
     stop_grace_period: ${ML_STOP_GRACE_PERIOD:-75s}
     cpus: ${ML_CPUS:-1.0}
     mem_limit: ${ML_MEMORY_LIMIT:-512m}
@@ -46,3 +54,6 @@ services:
 networks:
   intersim_internal:
     name: ${ML_NETWORK_NAME:-intersim-ml}
+
+volumes:
+  questiongen_state:
