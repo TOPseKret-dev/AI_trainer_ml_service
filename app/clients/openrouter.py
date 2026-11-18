@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from typing import Any
 
@@ -59,6 +60,19 @@ class OpenRouterClient:
         key = self.settings.openrouter_api_key.get_secret_value().strip()
         if not key:
             raise ProviderNotConfigured()
+        # JSON object mode needs an explicit trusted format instruction. Never
+        # interpolate candidate text or include HTTP metadata in this schema.
+        output_format = (
+            "Верни ровно один JSON-объект согласно следующей JSON Schema. "
+            "Значение верхнего уровня не может быть null или массивом. "
+            "Если поле допускает null, сохрани это поле внутри объекта.\nJSON Schema:\n"
+            + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+        )
+        messages = [
+            *messages[:2],
+            {"role": "system", "content": output_format},
+            *messages[2:],
+        ]
         payload = {
             "model": self.settings.openrouter_model,
             "messages": messages,
@@ -69,14 +83,10 @@ class OpenRouterClient:
                 "require_parameters": True,
             },
             "reasoning": {"enabled": False},
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": response_model.__name__,
-                    "strict": True,
-                    "schema": response_model.model_json_schema(),
-                },
-            },
+            # Alibaba rejects uniqueItems and currently returns root arrays in
+            # json_schema mode. Keep JSON generation and validate the complete
+            # result schema/domain in generate_structured before HTTP success.
+            "response_format": {"type": "json_object"},
         }
         try:
             response = await self.http.post(

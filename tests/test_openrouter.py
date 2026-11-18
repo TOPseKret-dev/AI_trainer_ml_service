@@ -58,14 +58,8 @@ def test_request_construction(
         "require_parameters": True,
     }
     assert call["reasoning"] == {"enabled": False}
-    assert call["response_format"] == {
-        "type": "json_schema",
-        "json_schema": {
-            "name": schema.__name__,
-            "strict": True,
-            "schema": schema.model_json_schema(),
-        },
-    }
+    assert call["response_format"] == {"type": "json_object"}
+    assert "JSON" in prompt
     assert set(call) == {
         "model",
         "messages",
@@ -77,10 +71,13 @@ def test_request_construction(
     messages = call["messages"]
     assert prompt and version
     assert messages[0] == {"role": "system", "content": prompt}
+    assert messages[2]["role"] == "system"
+    result_schema = json.loads(messages[2]["content"].split("\nJSON Schema:\n", 1)[1])
+    assert result_schema == schema.model_json_schema()
     trusted = json.loads(messages[1]["content"].split("\n", 1)[1])
     assert trusted == {k: v for k, v in payload.items() if k != "dialogue"}
-    assert all(injection not in message["content"] for message in messages[:2])
-    assert messages[2:] == [
+    assert all(injection not in message["content"] for message in messages[:3])
+    assert messages[3:] == [
         {"role": "user", "content": injection},
         {"role": "assistant", "content": "Обоснуйте своё утверждение."},
         {"role": "user", "content": "Группирует строки."},

@@ -32,13 +32,14 @@ PyCharm: interpreter `.venv/bin/python`, target Module `uvicorn`, parameters
 
 Обычный pytest исключает marker `integration`, даже если ключ есть в environment
 или `.env`. HTTP transport заменяется MockTransport; реального inference нет.
-Два платных smoke-теста запускаются только явно:
+Три платных smoke-теста запускаются только явно:
 
 ```bash
 .venv/bin/python -m pytest -m integration
 ```
 
-Они требуют ключа и выполняют до четырёх inference calls с учётом repair.
+Они требуют ключа и выполняют до шести inference calls с учётом repair:
+follow-up, завершение вопроса через complete/null и оценка ответа.
 Структурная валидация и mock-тесты не измеряют качество реальной модели,
 нейтральность follow-up или устойчивость к prompt injection. Для этих свойств
 нужен отдельный контрольный набор и реальные прогоны.
@@ -78,7 +79,7 @@ readiness, OpenAPI и жёсткий лимит Interviewer. Этот smoke не
 - `app/api` — маршруты, загрузка аудио и dependency injection.
 - `app/schemas` — Pydantic v2, запрет неизвестных полей, проверки связанных значений.
 - `app/services` — orchestration, общий deadline, repair и доменная валидация.
-- `app/clients/openrouter.py` — транспорт, provider routing, strict JSON Schema, usage.
+- `app/clients/openrouter.py` — транспорт, provider routing, JSON object mode, usage.
 - `app/prompts` — версии и полные тексты инструкций Interviewer/Evaluator.
 - `app/settings.py` — environment и локальный `.env`; ключ представлен `SecretStr`.
 
@@ -95,6 +96,24 @@ Evaluator проверяет anchors, точный набор criterion_id, со
 
 Модель `qwen/qwen3.5-27b` и провайдер `alibaba` закреплены в settings. Provider
 fallback отключён; reasoning отключён. Температуры Interviewer/Evaluator — 0.2/0.0.
+OpenRouter получает `response_format={"type":"json_object"}`. После исходного
+system prompt и trusted configuration добавляется отдельная доверенная
+system-инструкция с полной JSON Schema предметного результата. Она требует
+объект верхнего уровня и разрешает null только внутри полей, чтобы complete
+не превращался в JSON null. Реплики кандидата не включаются в эту инструкцию.
+На 19.11.2026
+Alibaba отклоняет `uniqueItems` в JSON Schema с upstream 400, который OpenRouter
+оборачивает в 502. После удаления этого keyword режим `json_schema` возвращает
+массив вместо требуемого объекта даже на минимальной контрольной схеме.
+Режим `json_object` проверен реальными вызовами обоих endpoints с той же моделью,
+провайдером, промптами и температурами. Это явная настройка транспорта, без
+автоматического fallback или дополнительного сетевого retry.
+Pydantic и предметная валидация по-прежнему проверяют весь результат. Пустой
+массив или массив с объектом не преобразуются в успешный ответ; допускается
+только один semantic repair. Уникальность evidence и остальные ограничения
+сохранены на стороне Python. Ограничения провайдера:
+[Alibaba structured output](https://www.alibabacloud.com/help/en/model-studio/qwen-structured-output).
+
 Смена модели или провайдера требует проверки поддержки передаваемых параметров,
 structured output и контрольного набора, а не только изменения `.env`.
 
@@ -105,3 +124,6 @@ Workflow `.github/workflows/ci.yml` устанавливает dev lock, зап�
 проверяет HTTP, Docker DNS, UID и read-only filesystem. Ключ для CI — фиктивный;
 модель не вызывается. Compose-проект CI изолирован и удаляется в конце job.
 Автоматического деплоя на сервер или публикации образа workflow не выполняет.
+Зелёный CI и readiness подтверждают локальную работоспособность, но не доступность
+или соблюдение формата ответа внешним провайдером. Перед выкладкой изменений
+LLM-транспорта отдельно запускайте три opt-in integration-теста.

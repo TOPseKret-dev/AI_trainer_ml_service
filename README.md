@@ -1,5 +1,11 @@
 # InterSim ML Service
 
+Эта ветка `hotfix/legacy-openrouter-json-object` сохраняет старый HTTP-контракт
+для текущего Backend. Ветка `main` содержит v2 и развёртывается отдельно после
+обновления Backend. Патч меняет только режим structured output OpenRouter;
+модель, промпты и Python-валидация сохранены. Причина и проверка исправления —
+в [документации разработки](docs/development.md).
+
 Внутренний HTTP-сервис InterSim на Python 3.12, FastAPI и Pydantic v2.
 Core Backend передаёт контекст вопроса и диалог; ML возвращает уточнение или оценку.
 
