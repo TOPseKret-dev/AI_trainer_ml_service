@@ -1,18 +1,22 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.interviewer import InterviewerResponse
+from app.schemas.interviewer import InterviewerLLMResult
 
 URL = "/api/v1/interviewer"
+
+
+def domain(response):
+    return {k: v for k, v in response.json().items() if k != "meta"}
 
 
 def test_follow_up(client, interviewer_payload, interviewer_result, mock_router):
     response = client.post(URL, json=interviewer_payload)
     assert response.status_code == 200
-    assert set(response.json()) == {"action", "message"}
+    assert set(response.json()) == {"action", "message", "meta"}
     assert response.json()["action"] == "follow_up"
     assert response.json()["message"].strip()
-    assert response.json() == interviewer_result
+    assert domain(response) == interviewer_result
     assert len(mock_router.calls) == 1
 
 
@@ -21,7 +25,7 @@ def test_early_complete(client, interviewer_payload, interviewer_scenarios, mock
     mock_router.queue({"action": "complete", "message": None})
     response = client.post(URL, json=interviewer_payload)
     assert response.status_code == 200
-    assert response.json() == {"action": "complete", "message": None}
+    assert domain(response) == {"action": "complete", "message": None}
     assert len(mock_router.calls) == 1
 
 
@@ -30,8 +34,11 @@ def test_complete_at_or_above_limit(client, interviewer_payload, mock_router, co
     interviewer_payload.update(follow_up_count=count, max_follow_ups=maximum)
     response = client.post(URL, json=interviewer_payload)
     assert response.status_code == 200
-    assert response.json() == {"action": "complete", "message": None}
+    assert domain(response) == {"action": "complete", "message": None}
     assert mock_router.calls == []
+    assert response.json()["meta"]["provider_attempts"] == 0
+    assert response.json()["meta"]["prompt_tokens"] == 0
+    assert response.json()["meta"]["completion_tokens"] == 0
 
 
 @pytest.mark.parametrize(
@@ -56,7 +63,7 @@ def test_structural_repair_succeeds(client, interviewer_payload, mock_router, in
     mock_router.queue({"action": "complete", "message": "invalid"}, interviewer_result)
     response = client.post(URL, json=interviewer_payload)
     assert response.status_code == 200
-    assert response.json() == interviewer_result
+    assert domain(response) == interviewer_result
     assert len(mock_router.calls) == 2
 
 
@@ -105,4 +112,4 @@ def test_counts_are_required(client, interviewer_payload, field):
 )
 def test_response_action_message_invariant(action, message):
     with pytest.raises(ValidationError):
-        InterviewerResponse(action=action, message=message)
+        InterviewerLLMResult(action=action, message=message)

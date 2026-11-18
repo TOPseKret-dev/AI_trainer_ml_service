@@ -28,7 +28,9 @@ def test_deadline_cancels_inflight_transport_and_returns_safe_error(
     try:
         response = client.post("/api/v1/interviewer", json=interviewer_payload)
         assert response.status_code == 504
-        assert response.json() == {"detail": "ML provider request timed out"}
+        assert response.json()["error"]["code"] == "ML_TIMEOUT"
+        assert response.json()["meta"]["provider_attempts"] == 1
+        assert response.json()["meta"]["prompt_tokens"] is None
         assert started == [True]
         assert cancelled == [True]
     finally:

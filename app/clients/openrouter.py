@@ -1,48 +1,140 @@
-from dataclasses import dataclass
-from typing import Any
+import math
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 import httpx
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel
 
-from app.errors import (
-    InvalidProviderResponse,
-    ProviderNotConfigured,
-    ProviderTimeout,
-    ProviderUnavailable,
-)
+from app.errors import MLErrorCode, MLServiceError, ProviderNotConfigured
+from app.generation import GenerationContext
 from app.settings import Settings
 
 
-@dataclass
-class AttemptMetadata:
-    http_status: int | None = None
-    upstream_status: int | None = None
-    finish_reason: str | None = None
-    input_tokens: int | None = None
-    output_tokens: int | None = None
-    reasoning_tokens: int | None = None
+def provider_result_schema(model: type[BaseModel]) -> dict:
+    """Keep the existing structural provider schema; enforce cross-field rules in Python.
+
+    Conditional keywords belong to the full HTTP contracts. Adding them to the
+    previously working provider schema is unnecessary for the v2 migration.
+    """
+    schema = model.model_json_schema()
+
+    def structural(node):
+        if isinstance(node, dict):
+            for keyword in ("oneOf", "allOf", "if", "then", "else"):
+                node.pop(keyword, None)
+            for child in node.values():
+                structural(child)
+        elif isinstance(node, list):
+            for child in node:
+                structural(child)
+
+    structural(schema)
+    return schema
 
 
-class TokenDetails(BaseModel):
-    reasoning_tokens: int | None = Field(default=None, ge=0, strict=True)
+def retry_after_seconds(value: str | None) -> int | None:
+    if value is None:
+        return None
+    value = value.strip()
+    if value.isascii() and value.isdecimal():
+        # Untrusted header sizes are bounded by the HTTP transport.
+        try:
+            return int(value)
+        except ValueError:
+            return None
+    try:
+        date = parsedate_to_datetime(value)
+        if date.tzinfo is None:
+            return None
+        return max(0, math.ceil((date - datetime.now(UTC)).total_seconds()))
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
-class Usage(BaseModel):
-    prompt_tokens: int | None = Field(default=None, ge=0, strict=True)
-    completion_tokens: int | None = Field(default=None, ge=0, strict=True)
-    completion_tokens_details: TokenDetails | None = None
+AUTH_CODES = {
+    "invalid_api_key",
+    "authentication_error",
+    "permission_denied",
+    "access_denied",
+    "region_not_supported",
+    "country_not_supported",
+    "provider_access_denied",
+}
+QUOTA_CODES = {
+    "insufficient_quota",
+    "quota_exceeded",
+    "insufficient_credits",
+    "insufficient_balance",
+    "billing_hard_limit_reached",
+    "payment_required",
+}
+CONFIG_CODES = {
+    "model_not_found",
+    "invalid_model",
+    "invalid_provider",
+    "invalid_request_error",
+    "unsupported_parameter",
+    "unsupported_model",
+    "no_endpoints_found",
+}
+CONFIG_PARAMS = {
+    "model",
+    "provider",
+    "response_format",
+    "temperature",
+    "reasoning",
+    "route",
+    "endpoint",
+}
 
 
-def raise_upstream_error(status: int) -> None:
-    if status in {408, 504}:
-        raise ProviderTimeout()
-    if status in {401, 402, 403, 404, 429} or status >= 500:
-        raise ProviderUnavailable()
-    raise InvalidProviderResponse()
+def upstream_status(error: object) -> int | None:
+    if not isinstance(error, dict):
+        return None
+    value = error.get("code")
+    if isinstance(value, str) and value.isascii() and len(value) == 3 and value.isdecimal():
+        value = int(value)
+    return value if type(value) is int and 400 <= value <= 599 else None
+
+
+def upstream_error(status: int, error: object, retry_after: str | None) -> MLServiceError:
+    # Only documented machine codes/parameter names are classified. Never search
+    # arbitrary provider message text (which can contain echoed user input).
+    signals = set()
+    statuses = {status}
+    parameter = None
+    if isinstance(error, dict):
+        for field in ("code", "type"):
+            value = error.get(field)
+            if isinstance(value, str):
+                signals.add(value.lower())
+        code = upstream_status(error)
+        if code is not None:
+            statuses.add(code)
+        parameter = error.get("param")
+    if signals & AUTH_CODES or statuses & {401, 403}:
+        code = MLErrorCode.PROVIDER_AUTH_ERROR
+    elif signals & QUOTA_CODES or 402 in statuses:
+        code = MLErrorCode.PROVIDER_QUOTA_EXCEEDED
+    elif signals & CONFIG_CODES or (
+        statuses & {400, 404, 422} and isinstance(parameter, str) and parameter in CONFIG_PARAMS
+    ):
+        code = MLErrorCode.PROVIDER_CONFIG_ERROR
+    elif statuses & {408, 504}:
+        code = MLErrorCode.TIMEOUT
+    elif 429 in statuses:
+        return MLServiceError(
+            MLErrorCode.RATE_LIMITED, retry_after_seconds=retry_after_seconds(retry_after)
+        )
+    elif any(code >= 500 for code in statuses):
+        code = MLErrorCode.UNAVAILABLE
+    else:
+        code = MLErrorCode.INVALID_RESPONSE
+    return MLServiceError(code)
 
 
 class OpenRouterClient:
-    """Transport only; the caller owns AsyncClient lifetime and result validation."""
+    """No transport retries. A request context counts physical calls and owns usage."""
 
     def __init__(self, http: httpx.AsyncClient, settings: Settings) -> None:
         self.http = http
@@ -54,7 +146,7 @@ class OpenRouterClient:
         messages: list[dict[str, str]],
         response_model: type[BaseModel],
         temperature: float,
-        metadata: AttemptMetadata,
+        context: GenerationContext,
     ) -> str:
         key = self.settings.openrouter_api_key.get_secret_value().strip()
         if not key:
@@ -74,51 +166,73 @@ class OpenRouterClient:
                 "json_schema": {
                     "name": response_model.__name__,
                     "strict": True,
-                    "schema": response_model.model_json_schema(),
+                    "schema": provider_result_schema(response_model),
                 },
             },
         }
+        timeout = min(context.remaining(), self.settings.openrouter_timeout_seconds)
+        metadata = context.usage.start_attempt()
         try:
             response = await self.http.post(
                 f"{str(self.settings.openrouter_base_url).rstrip('/')}/chat/completions",
                 headers={"Authorization": f"Bearer {key}"},
                 json=payload,
-                timeout=self.settings.openrouter_timeout_seconds,
+                timeout=timeout,
             )
         except httpx.TimeoutException:
-            raise ProviderTimeout() from None
+            raise MLServiceError(MLErrorCode.TIMEOUT) from None
+        except (httpx.RemoteProtocolError, httpx.DecodingError):
+            raise MLServiceError(MLErrorCode.INVALID_RESPONSE) from None
+        except httpx.UnsupportedProtocol:
+            raise MLServiceError(MLErrorCode.PROVIDER_CONFIG_ERROR) from None
         except httpx.RequestError:
-            raise ProviderUnavailable() from None
+            raise MLServiceError(MLErrorCode.UNAVAILABLE) from None
         metadata.http_status = response.status_code
-        if not response.is_success:
-            raise_upstream_error(response.status_code)
         try:
-            body: Any = response.json()
-            if not isinstance(body, dict):
-                raise ValueError
-            if body.get("usage") is not None:
-                usage = Usage.model_validate(body["usage"])
-                metadata.input_tokens = usage.prompt_tokens
-                metadata.output_tokens = usage.completion_tokens
-                if usage.completion_tokens_details:
-                    metadata.reasoning_tokens = usage.completion_tokens_details.reasoning_tokens
-            # OpenRouter may report a provider error inside a successful HTTP envelope.
-            if "error" in body:
-                error = body["error"]
-                code = error.get("code") if isinstance(error, dict) else None
-                if type(code) is int and 400 <= code <= 599:
-                    metadata.upstream_status = code
-                    raise_upstream_error(code)
-                raise ValueError
-            choice = body["choices"][0]
-            finish_reason = choice.get("finish_reason")
-            if finish_reason in {"stop", "length", "error", "content_filter", "tool_calls"}:
-                metadata.finish_reason = finish_reason
-            if finish_reason != "stop":
-                raise ValueError
-            content = choice["message"]["content"]
-            if not isinstance(content, str) or not content.strip():
-                raise ValueError
-            return content
-        except (ValueError, KeyError, IndexError, TypeError, AttributeError, ValidationError):
-            raise InvalidProviderResponse() from None
+            body = response.json()
+        except (ValueError, UnicodeError):
+            body = None
+        metadata.record_usage(body)
+        error = body.get("error") if isinstance(body, dict) else None
+        if not response.is_success or (isinstance(body, dict) and "error" in body):
+            metadata.upstream_status = upstream_status(error)
+            raise upstream_error(response.status_code, error, response.headers.get("Retry-After"))
+
+        if not isinstance(body, dict) or not isinstance(body.get("choices"), list):
+            raise MLServiceError(MLErrorCode.INVALID_RESPONSE)
+        if not body["choices"] or not isinstance(body["choices"][0], dict):
+            raise MLServiceError(MLErrorCode.INVALID_RESPONSE)
+        choice = body["choices"][0]
+        if "error" in choice:
+            metadata.upstream_status = upstream_status(choice["error"])
+            raise upstream_error(200, choice["error"], response.headers.get("Retry-After"))
+        finish = choice.get("finish_reason")
+        if isinstance(finish, str) and finish in {
+            "stop",
+            "length",
+            "content_filter",
+            "error",
+            "tool_calls",
+        }:
+            metadata.finish_reason = finish
+        message = choice.get("message")
+        if finish == "content_filter" or (
+            isinstance(message, dict)
+            and (
+                message.get("refusal") is True
+                or (isinstance(message.get("refusal"), str) and message["refusal"].strip())
+            )
+        ):
+            raise MLServiceError(MLErrorCode.POLICY_REFUSAL)
+        if finish == "length":
+            raise MLServiceError(MLErrorCode.OUTPUT_TRUNCATED)
+        if finish != "stop" or not isinstance(message, dict) or "content" not in message:
+            raise MLServiceError(MLErrorCode.INVALID_RESPONSE)
+        if message.get("role", "assistant") != "assistant":
+            raise MLServiceError(MLErrorCode.INVALID_RESPONSE)
+        content = message["content"]
+        if content is None or (isinstance(content, str) and not content.strip()):
+            raise MLServiceError(MLErrorCode.EMPTY_RESPONSE)
+        if not isinstance(content, str):
+            raise MLServiceError(MLErrorCode.INVALID_RESPONSE)
+        return content

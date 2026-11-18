@@ -1,0 +1,104 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Criterion": {
+      "additionalProperties": false,
+      "properties": {
+        "criterion_id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Criterion Id",
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "criterion_id",
+        "description"
+      ],
+      "title": "Criterion",
+      "type": "object"
+    },
+    "DialogueMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "candidate",
+            "interviewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "content": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Content",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "DialogueMessage",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "question": {
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Question",
+      "type": "string"
+    },
+    "criteria": {
+      "items": {
+        "$ref": "#/$defs/Criterion"
+      },
+      "minItems": 1,
+      "title": "Criteria",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "dialogue": {
+      "items": {
+        "$ref": "#/$defs/DialogueMessage"
+      },
+      "minItems": 1,
+      "title": "Dialogue",
+      "type": "array"
+    },
+    "follow_up_count": {
+      "minimum": 0,
+      "title": "Follow Up Count",
+      "type": "integer"
+    },
+    "max_follow_ups": {
+      "minimum": 0,
+      "title": "Max Follow Ups",
+      "type": "integer"
+    },
+    "deadline_at": {
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|\\+00:00)$",
+      "title": "Deadline At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "question",
+    "criteria",
+    "dialogue",
+    "follow_up_count",
+    "max_follow_ups"
+  ],
+  "title": "InterviewerRequest",
+  "type": "object"
+}

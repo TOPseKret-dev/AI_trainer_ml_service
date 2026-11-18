@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "DialogueMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "candidate",
+            "interviewer"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "content": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Content",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "content"
+      ],
+      "title": "DialogueMessage",
+      "type": "object"
+    },
+    "EvaluatorCriterion": {
+      "additionalProperties": false,
+      "properties": {
+        "criterion_id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Criterion Id",
+          "type": "string"
+        },
+        "description": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        },
+        "anchors": {
+          "items": {
+            "$ref": "#/$defs/ScoreAnchor"
+          },
+          "minItems": 2,
+          "title": "Anchors",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "criterion_id",
+        "description",
+        "anchors"
+      ],
+      "title": "EvaluatorCriterion",
+      "type": "object"
+    },
+    "Grade": {
+      "enum": [
+        "junior",
+        "middle",
+        "senior"
+      ],
+      "title": "Grade",
+      "type": "string"
+    },
+    "ScoreAnchor": {
+      "additionalProperties": false,
+      "properties": {
+        "score": {
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        },
+        "description": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Description",
+          "type": "string"
+        }
+      },
+      "required": [
+        "score",
+        "description"
+      ],
+      "title": "ScoreAnchor",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "question": {
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Question",
+      "type": "string"
+    },
+    "target_level": {
+      "$ref": "#/$defs/Grade"
+    },
+    "reference_answer": {
+      "minLength": 1,
+      "pattern": "\\S",
+      "title": "Reference Answer",
+      "type": "string"
+    },
+    "criteria": {
+      "items": {
+        "$ref": "#/$defs/EvaluatorCriterion"
+      },
+      "minItems": 1,
+      "title": "Criteria",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "dialogue": {
+      "items": {
+        "$ref": "#/$defs/DialogueMessage"
+      },
+      "minItems": 1,
+      "title": "Dialogue",
+      "type": "array"
+    },
+    "deadline_at": {
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}[Tt]\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:[Zz]|\\+00:00)$",
+      "title": "Deadline At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "question",
+    "target_level",
+    "reference_answer",
+    "criteria",
+    "dialogue"
+  ],
+  "title": "EvaluatorRequest",
+  "type": "object"
+}

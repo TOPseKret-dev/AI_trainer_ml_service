@@ -6,8 +6,9 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
-from app.clients.openrouter import AttemptMetadata, OpenRouterClient
-from app.errors import InvalidProviderResponse, ProviderTimeout
+from app.clients.openrouter import OpenRouterClient
+from app.errors import MLErrorCode, MLServiceError, ProviderTimeout
+from app.generation import GenerationContext
 from app.schemas.common import DialogueMessage
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ def build_messages(
 async def generate_structured(
     *,
     client: OpenRouterClient,
+    context: GenerationContext,
     messages: list[dict[str, str]],
     response_model: type[ResponseT],
     service: str,
@@ -44,10 +46,12 @@ async def generate_structured(
     temperature: float,
     validate: Callable[[ResponseT], None] | None = None,
 ) -> ResponseT:
+    guard = asyncio.timeout(context.remaining())
     try:
-        async with asyncio.timeout(client.settings.llm_request_timeout_seconds):
+        async with guard:
             return await _generate_attempts(
                 client=client,
+                context=context,
                 messages=messages,
                 response_model=response_model,
                 service=service,
@@ -56,12 +60,17 @@ async def generate_structured(
                 validate=validate,
             )
     except TimeoutError:
-        raise ProviderTimeout() from None
+        # An arbitrary application TimeoutError is not our deadline expiring.
+        if guard.expired():
+            context.error_code = MLErrorCode.TIMEOUT
+            raise ProviderTimeout() from None
+        raise
 
 
 async def _generate_attempts(
     *,
     client: OpenRouterClient,
+    context: GenerationContext,
     messages: list[dict[str, str]],
     response_model: type[ResponseT],
     service: str,
@@ -69,65 +78,78 @@ async def _generate_attempts(
     temperature: float,
     validate: Callable[[ResponseT], None] | None,
 ) -> ResponseT:
-    for attempt in (1, 2):
+    for attempt_number in (1, 2):
+        context.remaining()
         started = perf_counter()
-        metadata = AttemptMetadata()
+        before = len(context.usage.attempts)
         outcome = "failure"
-        failure = "provider_error"
+        error_code = None
+        repair = False
         try:
             content = await client.complete(
                 messages=messages,
                 response_model=response_model,
                 temperature=temperature,
-                metadata=metadata,
+                context=context,
             )
-            result = response_model.model_validate_json(content)
-            if validate:
-                validate(result)
+            context.remaining()
+            try:
+                result = response_model.model_validate_json(content)
+                if validate:
+                    validate(result)
+            except (ValidationError, DomainViolation):
+                raise MLServiceError(MLErrorCode.SCHEMA_ERROR) from None
+            context.remaining()
             outcome = "success"
-            failure = "none"
+            context.error_code = None
             return result
         except asyncio.CancelledError:
-            failure = "cancelled"
+            outcome = "cancelled"
             raise
-        except (ValidationError, DomainViolation) as exc:
-            failure = "invalid_structured_output"
-            if attempt == 2:
-                raise InvalidProviderResponse() from None
-            # Never interpolate Pydantic error text: it can contain candidate/model content.
-            violation = (
-                str(exc)
-                if isinstance(exc, DomainViolation)
-                else "JSON Schema or response model invariants were violated."
-            )
+        except MLServiceError as exc:
+            error_code = exc.code
+            context.error_code = exc.code
+            if not exc.repairable or attempt_number == 2:
+                raise
+            context.remaining()
+            repair = True
             correction = {
                 "role": "system",
                 "content": (
-                    "Предыдущий structured result нарушил контракт: "
-                    f"{violation}\nВерни полностью исправленный structured result "
-                    "по исходной trusted configuration и JSON Schema. "
-                    "Соблюдай согласованность action/message и status/score/evidence."
+                    "Предыдущий результат нарушил контракт ответа. "
+                    f"Код нарушения: {exc.code.value}. "
+                    "Верни новый результат строго по исходной trusted configuration "
+                    "и JSON Schema. Соблюдай action/message и status/score/evidence. "
+                    "Не добавляй посторонние поля."
                 ),
             }
             messages = [*messages[:2], correction, *messages[2:]]
+        except Exception:
+            error_code = MLErrorCode.INTERNAL_ERROR
+            raise
         finally:
+            metadata = context.usage.attempts[-1] if len(context.usage.attempts) > before else None
             logger.info(
-                "service=%s model=%s provider=%s prompt_version=%s attempt=%d "
-                "latency_ms=%.2f http_status=%s upstream_status=%s outcome=%s failure=%s "
-                "finish_reason=%s input_tokens=%s output_tokens=%s reasoning_tokens=%s",
+                "service=%s model=%s provider=%s prompt_version=%s correlation_id=%s "
+                "attempt=%d provider_attempts=%d latency_ms=%.2f http_status=%s "
+                "upstream_status=%s outcome=%s error_code=%s finish_reason=%s "
+                "prompt_tokens=%s completion_tokens=%s reasoning_tokens=%s repair=%s",
                 service,
                 client.settings.openrouter_model,
                 client.settings.openrouter_provider,
                 prompt_version,
-                attempt,
+                context.correlation_id,
+                len(context.usage.attempts),
+                len(context.usage.attempts),
                 (perf_counter() - started) * 1000,
-                metadata.http_status,
-                metadata.upstream_status,
+                metadata.http_status if metadata else None,
+                metadata.upstream_status if metadata else None,
                 outcome,
-                failure,
-                metadata.finish_reason,
-                metadata.input_tokens,
-                metadata.output_tokens,
-                metadata.reasoning_tokens,
+                error_code,
+                metadata.finish_reason if metadata else None,
+                metadata.prompt_tokens if metadata else None,
+                metadata.completion_tokens if metadata else None,
+                metadata.reasoning_tokens if metadata else None,
+                repair,
             )
-    raise AssertionError("Unreachable: attempts either return or raise")
+    raise AssertionError("Unreachable")

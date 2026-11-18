@@ -37,6 +37,7 @@ jobs:
         run: |
           ruff check .
           ruff format --check .
+          python -m app.contracts --check
           python -m pytest
           python -m pip check
       - name: Validate Compose

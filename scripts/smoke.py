@@ -49,9 +49,17 @@ def check(base_url: str) -> None:
             "max_follow_ups": 0,
         },
     )
-    if result != {"action": "complete", "message": None}:
+    if {k: v for k, v in result.items() if k != "meta"} != {"action": "complete", "message": None}:
         raise ValueError("Interviewer hard limit did not complete the question")
-    print("OK interviewer hard limit (no inference)")
+    meta = result["meta"]
+    if (
+        meta["provider_attempts"] != 0
+        or meta["prompt_tokens"] != 0
+        or meta["completion_tokens"] != 0
+        or meta["duration_ms"] < 0
+    ):
+        raise ValueError("Invalid deterministic-completion metadata")
+    print("OK interviewer hard limit and v2 metadata (no inference)")
 
 
 def main() -> int:

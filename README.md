@@ -2,6 +2,8 @@
 
 Внутренний HTTP-сервис InterSim на Python 3.12, FastAPI и Pydantic v2.
 Core Backend передаёт контекст вопроса и диалог; ML возвращает уточнение или оценку.
+Interviewer/Evaluator реализуют согласованный контракт v2 / MI-007: обязательная
+meta на успехе, 17 кодов ошибок, deadline_at и максимум один semantic repair.
 
 | Функция | Состояние |
 | --- | --- |
@@ -48,12 +50,14 @@ docker compose -f compose.yaml -f compose.intersim.yaml up -d --build --wait
 
 [Интеграция с Core Backend](docs/integration.md) содержит определение имени сети,
 проверку DNS, рабочие маршруты и пример настройки HTTP-клиента.
-В проверенной ветке Backend `dev` сам клиент ML ещё не реализован.
+Core должен использовать DTO, ошибки и метаданные согласованного контракта v2.
 
 ## Документация
 
 - [Развёртывание, настройки, обновление и откат](docs/deployment.md).
 - [HTTP API и примеры запросов](docs/api.md).
+- Канонические JSON Schema v2: `interviewer_input.schema.json`,
+  `interviewer_output.schema.json`, `evaluator_input.schema.json`, `evaluator_output.schema.json`.
 - [Связь с другими сервисами и расхождения общих документов](docs/integration.md).
 - [Разработка, тесты и обновление lock-файлов](docs/development.md).
 - [Исходные материалы и их происхождение](docs/reference/README.md).
@@ -62,6 +66,7 @@ docker compose -f compose.yaml -f compose.intersim.yaml up -d --build --wait
 
 ```bash
 .venv/bin/python -m pytest
+.venv/bin/python -m app.contracts --check
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 ```

@@ -1,31 +1,21 @@
-# Интеграция с сервисами InterSim
+# Интеграция Core Backend → ML: контракт v2 / MI-007
 
-## Проверенные источники
+Согласованный контракт v2 реализован в ML Service 0.2.0.
+Рабочие DTO, meta, каталог 17 ошибок и политика времени находятся в
+[HTTP API](api.md); четыре канонические JSON Schema — в корне репозитория.
+Общие старые примеры из intersim-docs с camelCase и маршрутами
+/interviewer или /evaluator не являются wire-контрактом этой реализации.
 
-Конфигурация сверена 03.11.2026 с приватными репозиториями организации:
+## Подключение к Docker-сети
 
-- [intersim-docs](https://github.com/intersim-org/intersim-docs/tree/6d97477244fe87d7f3aab8f2500e651dbc8f4eb6) — `main`, `6d974772`.
-- [intersim-backend](https://github.com/intersim-org/intersim-backend/tree/1c1863407c2aa3f155330792e2e46f54b1a3935e) — `dev`, `1c186340`.
-- [intersim-frontend](https://github.com/intersim-org/intersim-frontend/tree/57d55c6aa47db3920c3d5f2a717f1b0c670e739d) — `main`, `57d55c6a`.
-
-В production Compose Backend использует сервис `backend` на порту 5000 и сеть
-с логическим ключом `intersim_internal`. ML подключается к той же сети как
-`ml-service:8001`. Сервису нужен исходящий HTTPS к OpenRouter; сеть не должна
-запрещать этот выход через `internal: true` без отдельного egress-маршрута.
-
-## Подключение к существующему Core-стеку
-
-Сначала запустите существующий production Compose Backend с его штатными
-PostgreSQL и Redis. Узнайте фактическое имя сети:
+Для одного Docker host ML подключается к существующей сети Backend:
 
 ```bash
 docker inspect intersim_backend --format '{{json .NetworkSettings.Networks}}'
 ```
 
-Compose обычно добавляет префикс имени проекта. Например, при `-p intersim`
-имя сети будет `intersim_intersim_internal`; на другом сервере оно может отличаться.
-В `.env` ML задайте найденное значение `INTERSIM_NETWORK`, а также ключ OpenRouter.
-Далее из каталога ML:
+В ML .env задайте OPENROUTER_API_KEY и фактическое имя сети в INTERSIM_NETWORK,
+например intersim_intersim_internal. Во всех командах используйте оба файла:
 
 ```bash
 docker compose -f compose.yaml -f compose.intersim.yaml config --quiet
@@ -33,37 +23,27 @@ docker compose -f compose.yaml -f compose.intersim.yaml up -d --build --wait --w
 python3 scripts/smoke.py
 ```
 
-Override помечает сеть как external: ML не создаёт её и не удаляет при остановке.
-Те же два `-f` нужны для `logs`, `stop`, `down` и дальнейших `up`.
-Не запускайте этот же проект в одном случае с override, а в другом без него.
+Override объявляет сеть external: ML не создаёт и не удаляет её.
+Исходящий HTTPS к OpenRouter должен быть разрешён. PostgreSQL/Redis принадлежат
+Core; ML не подключается к БД и не выполняет миграции.
+Для нескольких Docker hosts потребуется маршрутизация или оркестратор.
 
-Проверка DNS и HTTP из временного соседнего контейнера, без LLM-вызова:
+Core использует base URL `http://ml-service:8001/`:
 
-```bash
-docker run --rm --network <фактическое-имя-сети> intersim-ml:local \
-  python -c "import urllib.request; print(urllib.request.urlopen('http://ml-service:8001/health/ready', timeout=5).read().decode())"
-```
-
-Если образ называется иначе, замените `intersim-ml:local` на значение `ML_IMAGE`.
-Связь между Compose-проектами работает на одном Docker host. Для нескольких
-серверов понадобится отдельная маршрутизация или оркестратор.
-
-## Адрес и HTTP-клиент Core Backend
-
-В контейнере Core base URL должен быть `http://ml-service:8001/`, а не `localhost`:
-
-| Вызов | Маршрут относительно base URL |
+| Операция | Путь относительно base URL |
 | --- | --- |
-| Readiness | `health/ready` |
-| Уточнение | `api/v1/interviewer` |
-| Оценка | `api/v1/evaluator` |
-| Транскрибация, пока stub | `api/v1/transcriptions` |
-| Генерация черновиков, пока stub | `api/v1/question-bank/generate` |
+| Readiness | health/ready |
+| Interviewer v2 | api/v1/interviewer |
+| Evaluator v2 | api/v1/evaluator |
+| Groq ASR, отдельный контракт | api/v1/transcriptions |
+| Черновики банка, provisional | api/v1/question-bank/generate |
 
-В проверенной ветке Backend нет регистрации ML HttpClient и вызовов Interviewer/
-Evaluator: поднятая сеть обеспечивает транспортную связь, а бизнес-интеграция
-требует отдельного изменения Backend. Следующий пример показывает настройку
-клиента для этого изменения; одни переменные environment ещё не добавят его в Core:
+Frontend обращается к Core. ML доступен доверенным участникам внутренней сети;
+host port привязан к 127.0.0.1. Публичный API Core и CORS фронтенда сюда не входят.
+
+## HTTP-клиент Backend
+
+Зарегистрируйте сервисный HttpClient с base URL из конфигурации. Например:
 
 ```csharp
 builder.Services.AddHttpClient("ML", client =>
@@ -74,66 +54,77 @@ builder.Services.AddHttpClient("ML", client =>
 });
 ```
 
-`ML_SERVICE_URL=http://ml-service:8001/` можно добавить в environment Core после
-внедрения такого клиента. JSON-поля ML имеют `snake_case`; отправляйте DTO с
-нужными JSON-именами согласно [рабочему контракту](api.md) или `/openapi.json`.
-В Evaluation передавайте anchors и reference_answer текущего грейда, без weight.
+ML_SERVICE_URL в Docker не должен указывать на localhost.
+Backend timeout по MI-007 — 60 с по умолчанию, настраиваемый диапазон 30..120 с.
+Для каждой HTTP-попытки Core передаёт deadline_at в UTC от начала своего запроса.
+ML оставляет 5 с резерва и ограничивает весь вызов максимумом 55 с.
+Таким образом 30/60/120 с на Core дают не более 25/55/55 с генерации.
 
-Вызовы модели могут занять весь бюджет 55 секунд, включая один repair. Таймаут
-Core должен быть больше этого бюджета; старое значение 30 секунд из общего
-`.env.example` для этой конфигурации недостаточно. Backend сохраняет ответ
-пользователя до вызова AI и управляет повтором/идемпотентностью на своём уровне.
+Все предметные JSON-имена — snake_case. DTO Backend должен явно сериализовать
+criterion_id, reference_answer, target_level, follow_up_count, max_follow_ups,
+deadline_at и другие имена по схемам. Интерпретируйте HTTP status до чтения
+предметного success DTO; при ошибке читайте error.code/message/details и optional meta.
+Различайте null (неизвестно) и 0 (достоверный ноль).
 
-## Последовательность работы Core → ML
+## Последовательность обработки
 
-1. Core создаёт тренировку, выбирает опубликованные версии вопросов и фиксирует
-   их в своей БД. ML не выбирает вопросы из банка и не создаёт сессию.
-2. После ответа пользователя Core сохраняет реплику и передаёт Interviewer текст
-   текущего основного вопроса, описания его применимых критериев, всю цепочку
-   диалога по этому вопросу и счётчики уточнений.
-3. При `follow_up` Core сохраняет уточнение, увеличивает счётчик и возвращает его
-   фронтенду. После следующего ответа передаёт расширенную цепочку. При `complete`
-   закрывает только текущий вопрос и управляет переходом к следующему.
-4. Для оценки Core собирает Evaluator request по грейду, зафиксированному для
-   тренировки: эталон из `question_grade_configs`, критерии и anchors из
-   `criterion_grade_configs` / `criterion_grade_anchors` выбранной версии.
-   Критерии без конфигурации этого грейда не включаются. Эталон другого грейда
-   не подставляется. В JSON критерия передаются только `criterion_id`,
-   `description`, `anchors`; веса и `max_score` остаются в Core.
-5. Core сохраняет результаты по `criterion_id`, комментарии, массивы evidence,
-   summary и recommendations. Итоговые взвешенные баллы и пользовательскую
-   историю формирует Core. Evaluator возвращает разбор одного основного вопроса,
-   а отдельного вызова для общего LLM-резюме всей тренировки сейчас нет.
+1. Core создаёт TrainingSession и фиксирует выбранные опубликованные
+   QuestionVersion, грейд и рубрику.
+2. Сохраняет Answer/DialogueMessage до ML. В Interviewer передаёт вопрос,
+   применимые критерии, полную цепочку диалога этого вопроса и счётчики уточнений.
+3. При follow_up сохраняет message и увеличивает счётчик. При следующем ответе
+   передаёт расширенный диалог. При complete закрывает текущий вопрос и управляет
+   переходом к следующему. Повтор не должен создавать второе одинаковое уточнение.
+4. Для Evaluator выбирает reference_answer фактического грейда из
+   question_grade_configs выбранной версии. Передаёт только применимые критерии
+   с description и полной шкалой anchors из criterion_grade_configs /
+   criterion_grade_anchors. Weight, max_score и expected_level в JSON не передаются.
+5. Сохраняет QuestionFeedback и CriterionResult по criterion_id. Evidence хранится
+   как массив строк/jsonb. Summary/recommendations описывают один основной вопрос.
+   Взвешенный результат вычисляется кодом Core по сохранённой рубрике.
+6. Для каждого HTTP-вызова сохраняет одну запись LlmCall с агрегированными
+   prompt_tokens, completion_tokens и duration_ms из meta; provider_attempts
+   показывает 0..2 физических OpenRouter-вызова. Не добавляет reasoning_tokens
+   второй раз к completion и не дублирует расход repair отдельным учётом.
 
-Оба LLM-маршрута возвращают результат в ответе на тот же HTTP-запрос; ML не
-выдаёт task ID и не предоставляет polling/retry API. Фоновые задачи, статус
-обработки для фронтенда, повторы и `X-Idempotency-Key` реализуются в Core.
-Повтор POST к ML может означать новый платный вызов модели. ML не сохраняет
-присланный диалог между запросами, поэтому Core передаёт его целиком для каждого
-хода и оценки текущего вопроса.
+При отсутствии candidate-реплики Evaluator возвращает ML_NOTHING_TO_EVALUATE.
+Неполная рубрика даёт ML_INVALID_INPUT до вызова провайдера.
+LLM генерирует только предметный JSON; meta и error формирует Python.
+Отдельного ML API общего LLM-резюме всей тренировки пока нет.
 
-## Границы публичного API
+## Ошибки, идемпотентность и повтор
 
-Frontend обращается к Core Backend через существующий Nginx. ML работает во
-внутренней сети и не требует CORS. Host port привязан только к `127.0.0.1`,
-для диагностики и smoke на сервере. У ML нет пользовательской авторизации;
-доступ к нему даётся доверенным участникам Docker-сети. Публичный proxy-маршрут
-к ML в Nginx здесь не добавляется.
+ML выполняет максимум один внутренний repair только для EMPTY_RESPONSE,
+OUTPUT_TRUNCATED и SCHEMA_ERROR. Сетевые retry, fallback и очередь LLM отсутствуют.
+Вызовы синхронные, без task ID/polling/retry endpoints ML.
+Все 17 кодов и точные лимиты Backend перечислены в [HTTP API](api.md).
 
-## Расхождения общих документов
+Backend определяет профиль по error.code, учитывает Retry-After и хранит бюджет
+попыток отдельно от ML provider_attempts. Interviewer не повторяется автоматически.
+Evaluator может автоматически повторяться только при временной ошибке L.
+Для 502 после разрешённого repair допустим только ручной повтор.
+Auth/quota/config ошибки провайдера возвращаются как 503 с отдельными кодами,
+а не как 401 пользователя InterSim и не как временный rate limit.
 
-`intersim-docs/docker-compose.yml` содержит ранний шаблон с Python/asyncpg Backend
-и `localhost` в ML_SERVICE_URL. Для интеграции использован фактический .NET Compose
-из `intersim-backend/docker-compose.prod.yml`.
+Ответы уже завершённой/устаревшей операции не применяются к новой версии состояния.
+Повтор HTTP не создаёт новый Answer и не перезаписывает готовый QuestionFeedback.
+Эти правила, persistence и фоновые циклы реализуются в Core; ML хранит только
+контекст текущего HTTP-запроса в памяти.
 
-В `api_spec.md` остались примеры `/interviewer`, `/evaluator` с camelCase-полями;
-фактические маршруты ML — `/api/v1/interviewer` и `/api/v1/evaluator`, поля —
-snake_case по JSON-схемам. API-клиент должен использовать рабочий контракт ML.
-Изменения STT MI-003 от 03.11.2026 в общем документе помечены предложением:
-они не становятся реализованным API при добавлении Docker.
+## Проверка совместимости
 
-Контракт генерации пока provisional и требует настройки каждого критерия для
-всех грейдов вопроса; схема БЗ допускает отсутствие критерия на отдельном грейде.
-Согласование генератора, реальный ASR, сохранение LLM request/response и клиент
-Core остаются отдельными задачами. Существующие пользовательские данные,
-PostgreSQL и Redis ML Compose не изменяет.
+```bash
+python -m app.contracts --check
+python -m pytest
+python3 scripts/smoke.py
+```
+
+Unit/contract tests заменяют только HTTP transport OpenRouter, проверяют весь
+путь FastAPI → validation → service → client → result/error и не тратят inference.
+Smoke проверяет живой процесс и детерминированный hard limit с meta, без LLM.
+При необходимости импортируйте четыре схемы из корня в контрактные тесты Core.
+Старые архивные схемы из docs/reference не заменяют контракт v2.
+
+Groq ASR имеет собственные поля, deadline и error codes:
+[ASR](asr.md). Контракт генератора банка остаётся provisional.
+Смена модели, провайдера и промптов для миграции v2 не выполнялась.

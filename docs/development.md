@@ -26,6 +26,7 @@ PyCharm: interpreter `.venv/bin/python`, target Module `uvicorn`, parameters
 
 ```bash
 .venv/bin/python -m pytest
+.venv/bin/python -m app.contracts --check
 .venv/bin/ruff check .
 .venv/bin/ruff format --check .
 ```
@@ -87,6 +88,21 @@ readiness, OpenAPI и жёсткий лимит Interviewer. Этот smoke не
 сохраняет порядок: candidate → user, interviewer → assistant. Interviewer не
 получает reference_answer. При repair в trusted message добавляются только
 сгенерированные кодом нарушения контракта, без недоверенного результата модели.
+
+В v2 `InterviewerLLMResult` / `EvaluatorLLMResult` содержат только предметный
+результат. `InterviewerResponse` / `EvaluatorResponse` добавляют обязательную meta.
+`app/generation.py` хранит один монотонный deadline и UsageAccumulator;
+`app/http_contract.py` измеряет HTTP wall-clock, отменяет работу при disconnect
+и формирует безопасные ошибки только для двух LLM endpoints.
+Deadline, метрики и error envelope не включаются в trusted configuration.
+OpenRouter получает прежний структурный набор JSON Schema keywords; условные
+связи полей из полных HTTP-схем проверяются Python до ответа Backend.
+Эта проекция не добавляет в provider schema поля meta/error.
+
+Четыре схемы в корне генерируются `python -m app.contracts`; флаг `--check`
+проверяет отсутствие расхождений. Снимки схем коммитятся вместе с моделями.
+JSON Schema validator установлен только в dev lock. Каждый HTTP-ответ двух
+маршрутов в обычных тестах проверяется по опубликованной output schema.
 
 Evaluator проверяет anchors, точный набор criterion_id, согласованность статуса
 и score, а также дословное наличие evidence в реплике candidate. Релевантность

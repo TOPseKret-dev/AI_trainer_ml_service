@@ -1,15 +1,35 @@
 import asyncio
 import json
 from collections import deque
+from functools import lru_cache
+from pathlib import Path
 
 import httpx
 import pytest
 from fastapi.testclient import TestClient
+from jsonschema import Draft202012Validator, FormatChecker
 
 from app.api.dependencies import get_openrouter_client
 from app.clients.openrouter import OpenRouterClient
 from app.main import app
 from app.settings import Settings
+
+
+@lru_cache
+def contract_validator(operation, direction="output"):
+    path = Path(__file__).resolve().parents[1] / f"{operation}_{direction}.schema.json"
+    schema = json.loads(path.read_text())
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema, format_checker=FormatChecker())
+
+
+def check_http_contract(response):
+    path = response.request.url.path
+    if path in {"/api/v1/interviewer", "/api/v1/evaluator"}:
+        response.read()
+        contract_validator(path.rsplit("/", 1)[1]).validate(response.json())
+        assert response.headers["content-type"] == "application/json"
+        assert "detail" not in response.json()
 
 
 def completion_response(content):
@@ -36,8 +56,8 @@ class MockRouter:
         self.requests = []
         self.responses = deque()
         self.results = {
-            "InterviewerResponse": interviewer_result,
-            "EvaluatorResponse": evaluator_result,
+            "InterviewerLLMResult": interviewer_result,
+            "EvaluatorLLMResult": evaluator_result,
         }
         self.http = httpx.AsyncClient(transport=httpx.MockTransport(self.respond))
         self.client = OpenRouterClient(
@@ -103,6 +123,7 @@ def client(mock_router):
     app.dependency_overrides[get_openrouter_client] = lambda: mock_router.client
     try:
         with TestClient(app) as test_client:
+            test_client.event_hooks["response"].append(check_http_contract)
             yield test_client
     finally:
         app.dependency_overrides.pop(get_openrouter_client, None)
@@ -147,9 +168,7 @@ def evaluator_payload():
                 "criterion_id": "aggregation",
                 "description": "Объясняет агрегаты",
                 "anchors": [
-                    {"score": 0, "description": "Нет объяснения"},
-                    {"score": 2, "description": "Частичное объяснение"},
-                    {"score": 4, "description": "Полное объяснение"},
+                    {"score": n, "description": f"Уровень раскрытия {n}"} for n in range(5)
                 ],
             },
         ],

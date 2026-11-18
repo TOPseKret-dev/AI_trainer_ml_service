@@ -7,12 +7,12 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.api.dependencies import get_openrouter_client
-from app.clients.openrouter import OpenRouterClient
+from app.clients.openrouter import OpenRouterClient, provider_result_schema
 from app.main import app
 from app.prompts.evaluator import EVALUATOR_PROMPT_VERSION, EVALUATOR_SYSTEM_PROMPT
 from app.prompts.interviewer import INTERVIEWER_PROMPT_VERSION, INTERVIEWER_SYSTEM_PROMPT
-from app.schemas.evaluator import EvaluatorResponse
-from app.schemas.interviewer import InterviewerResponse
+from app.schemas.evaluator import EvaluatorLLMResult
+from app.schemas.interviewer import InterviewerLLMResult
 from app.settings import Settings
 
 
@@ -21,12 +21,12 @@ from app.settings import Settings
     [
         (
             "interviewer",
-            InterviewerResponse,
+            InterviewerLLMResult,
             0.2,
             INTERVIEWER_SYSTEM_PROMPT,
             INTERVIEWER_PROMPT_VERSION,
         ),
-        ("evaluator", EvaluatorResponse, 0.0, EVALUATOR_SYSTEM_PROMPT, EVALUATOR_PROMPT_VERSION),
+        ("evaluator", EvaluatorLLMResult, 0.0, EVALUATOR_SYSTEM_PROMPT, EVALUATOR_PROMPT_VERSION),
     ],
 )
 def test_request_construction(
@@ -63,7 +63,7 @@ def test_request_construction(
         "json_schema": {
             "name": schema.__name__,
             "strict": True,
-            "schema": schema.model_json_schema(),
+            "schema": provider_result_schema(schema),
         },
     }
     assert set(call) == {
@@ -93,7 +93,7 @@ def test_request_construction(
     request = mock_router.requests[0]
     assert str(request.url) == "https://openrouter.ai/api/v1/chat/completions"
     assert request.headers["Authorization"] == "Bearer unit-test-placeholder"
-    assert all(value == 55 for value in request.extensions["timeout"].values())
+    assert all(0 < value <= 55 for value in request.extensions["timeout"].values())
 
 
 @pytest.mark.parametrize(
@@ -103,7 +103,7 @@ def test_request_construction(
         (401, 503),
         (402, 503),
         (403, 503),
-        (404, 503),
+        (404, 502),
         (408, 504),
         (429, 503),
         (500, 503),
@@ -157,12 +157,8 @@ def test_transport_errors(client, mock_router, interviewer_payload, error, expec
         {},
         {"choices": []},
         {"choices": [None]},
-        {"choices": [{"message": {"content": None}, "finish_reason": "stop"}]},
-        {"choices": [{"message": {"content": ""}, "finish_reason": "stop"}]},
-        {"choices": [{"message": {"content": "  "}, "finish_reason": "stop"}]},
         {"choices": [{"message": {"content": []}, "finish_reason": "stop"}]},
         {"choices": [{"message": {}, "finish_reason": "stop"}]},
-        {"choices": [{"message": {"content": "{}"}, "finish_reason": "length"}]},
         {"choices": [{"message": {"content": "{}"}, "finish_reason": []}]},
         {"error": {"code": "bad", "message": "private-raw-body"}},
     ],
@@ -205,8 +201,8 @@ def test_observability_has_usage_and_no_content(client, mock_router, evaluator_p
         "http_status=200",
         "outcome=success",
         "finish_reason=stop",
-        "input_tokens=120",
-        "output_tokens=30",
+        "prompt_tokens=120",
+        "completion_tokens=30",
         "reasoning_tokens=0",
     ):
         assert expected in logs
@@ -267,9 +263,11 @@ def test_missing_key_keeps_app_healthy_and_returns_503(
             ):
                 response = test_client.post(f"/api/v1/{service}", json=payload)
                 assert response.status_code == 503
-                assert response.json() == {"detail": "OPENROUTER_API_KEY is not configured"}
+                assert response.json()["error"]["code"] == "ML_PROVIDER_NOT_CONFIGURED"
+                assert response.json()["meta"]["provider_attempts"] == 0
             interviewer_payload["follow_up_count"] = interviewer_payload["max_follow_ups"]
-            assert test_client.post("/api/v1/interviewer", json=interviewer_payload).json() == {
+            result = test_client.post("/api/v1/interviewer", json=interviewer_payload).json()
+            assert {k: v for k, v in result.items() if k != "meta"} == {
                 "action": "complete",
                 "message": None,
             }

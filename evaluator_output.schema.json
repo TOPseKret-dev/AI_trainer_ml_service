@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "EvaluatorResponse HTTP contract v2",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/EvaluatorResponse"
+    },
+    {
+      "$ref": "#/$defs/EvaluatorErrorResponse"
+    }
+  ],
+  "$defs": {
+    "CriterionEvaluation": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "properties": {
+              "score": {
+                "minimum": 1
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "absent",
+                  "incorrect"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "score": {
+                "const": 0
+              }
+            }
+          }
+        },
+        {
+          "else": {
+            "properties": {
+              "evidence": {
+                "minItems": 1
+              }
+            }
+          },
+          "if": {
+            "properties": {
+              "status": {
+                "const": "absent"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "evidence": {
+                "maxItems": 0
+              }
+            }
+          }
+        }
+      ],
+      "properties": {
+        "criterion_id": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Criterion Id",
+          "type": "string"
+        },
+        "score": {
+          "minimum": 0,
+          "title": "Score",
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "absent",
+            "incorrect",
+            "partial",
+            "correct"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "comment": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Comment",
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "criterion_id",
+        "score",
+        "status",
+        "comment",
+        "evidence"
+      ],
+      "title": "CriterionEvaluation",
+      "type": "object"
+    },
+    "MLResponseMeta": {
+      "additionalProperties": false,
+      "properties": {
+        "prompt_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Prompt Tokens"
+        },
+        "completion_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Completion Tokens"
+        },
+        "reasoning_tokens": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reasoning Tokens"
+        },
+        "duration_ms": {
+          "minimum": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        },
+        "provider_attempts": {
+          "maximum": 2,
+          "minimum": 0,
+          "title": "Provider Attempts",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "prompt_tokens",
+        "completion_tokens",
+        "duration_ms",
+        "provider_attempts"
+      ],
+      "title": "MLResponseMeta",
+      "type": "object"
+    },
+    "EvaluatorResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "criteria": {
+          "items": {
+            "$ref": "#/$defs/CriterionEvaluation"
+          },
+          "minItems": 1,
+          "title": "Criteria",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "summary": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Summary",
+          "type": "string"
+        },
+        "recommendations": {
+          "items": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "type": "string"
+          },
+          "title": "Recommendations",
+          "type": "array"
+        },
+        "meta": {
+          "$ref": "#/$defs/MLResponseMeta"
+        }
+      },
+      "required": [
+        "criteria",
+        "summary",
+        "recommendations",
+        "meta"
+      ],
+      "title": "EvaluatorResponse",
+      "type": "object"
+    },
+    "MLErrorBody_Literal__evaluator___": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/MLErrorCode"
+        },
+        "message": {
+          "minLength": 1,
+          "pattern": "\\S",
+          "title": "Message",
+          "type": "string"
+        },
+        "details": {
+          "$ref": "#/$defs/MLErrorDetails_Literal__evaluator___"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "MLErrorBody[Literal['evaluator']]",
+      "type": "object"
+    },
+    "MLErrorCode": {
+      "enum": [
+        "ML_INVALID_INPUT",
+        "ML_NOTHING_TO_EVALUATE",
+        "ML_PROVIDER_NOT_CONFIGURED",
+        "ML_PROVIDER_AUTH_ERROR",
+        "ML_PROVIDER_QUOTA_EXCEEDED",
+        "ML_PROVIDER_CONFIG_ERROR",
+        "ML_RATE_LIMITED",
+        "ML_UNAVAILABLE",
+        "ML_QUEUE_FULL",
+        "ML_TIMEOUT",
+        "ML_QUEUE_TIMEOUT",
+        "ML_EMPTY_RESPONSE",
+        "ML_OUTPUT_TRUNCATED",
+        "ML_SCHEMA_ERROR",
+        "ML_INVALID_RESPONSE",
+        "ML_POLICY_REFUSAL",
+        "ML_INTERNAL_ERROR"
+      ],
+      "title": "MLErrorCode",
+      "type": "string"
+    },
+    "MLErrorDetails_Literal__evaluator___": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "evaluator",
+          "title": "Operation",
+          "type": "string"
+        },
+        "retryable": {
+          "title": "Retryable",
+          "type": "boolean"
+        },
+        "retry_after_seconds": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Retry After Seconds"
+        },
+        "correlation_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Correlation Id"
+        },
+        "provider_attempts": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Provider Attempts"
+        }
+      },
+      "title": "MLErrorDetails[Literal['evaluator']]",
+      "type": "object"
+    },
+    "EvaluatorErrorResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "error": {
+          "$ref": "#/$defs/MLErrorBody_Literal__evaluator___"
+        },
+        "meta": {
+          "$ref": "#/$defs/MLResponseMeta"
+        }
+      },
+      "required": [
+        "error"
+      ],
+      "title": "MLErrorResponse[Literal['evaluator']]",
+      "type": "object"
+    }
+  }
+}

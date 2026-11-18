@@ -1,14 +1,16 @@
 import logging
 
 from app.clients.openrouter import OpenRouterClient
+from app.errors import MLErrorCode, MLServiceError
+from app.generation import GenerationContext
 from app.prompts.evaluator import EVALUATOR_PROMPT_VERSION, EVALUATOR_SYSTEM_PROMPT
-from app.schemas.evaluator import EvaluatorRequest, EvaluatorResponse
+from app.schemas.evaluator import EvaluatorLLMResult, EvaluatorRequest, EvaluatorResponse
 from app.services.structured import DomainViolation, build_messages, generate_structured
 
 logger = logging.getLogger(__name__)
 
 
-def validate_evaluation(request: EvaluatorRequest, response: EvaluatorResponse) -> None:
+def validate_evaluation(request: EvaluatorRequest, response: EvaluatorLLMResult) -> None:
     """Validate inference output against the request-specific rubric and candidate text."""
     rubric = {criterion.criterion_id: criterion for criterion in request.criteria}
     output_ids = [criterion.criterion_id for criterion in response.criteria]
@@ -44,19 +46,29 @@ def validate_evaluation(request: EvaluatorRequest, response: EvaluatorResponse) 
                 )
 
 
-async def evaluate_answer(request: EvaluatorRequest, client: OpenRouterClient) -> EvaluatorResponse:
+async def evaluate_answer(
+    request: EvaluatorRequest,
+    client: OpenRouterClient,
+    context: GenerationContext | None = None,
+) -> EvaluatorResponse:
+    context = context or GenerationContext("evaluator")
+    if not any(m.role == "candidate" and m.content.strip() for m in request.dialogue):
+        raise MLServiceError(MLErrorCode.NOTHING_TO_EVALUATE)
+    context.configure_deadline(client.settings.llm_request_timeout_seconds, request.deadline_at)
     result = await generate_structured(
         client=client,
+        context=context,
         messages=build_messages(
             EVALUATOR_SYSTEM_PROMPT,
-            request.model_dump_json(exclude={"dialogue"}),
+            request.model_dump_json(exclude={"dialogue", "deadline_at"}),
             request.dialogue,
         ),
-        response_model=EvaluatorResponse,
+        response_model=EvaluatorLLMResult,
         service="evaluator",
         prompt_version=EVALUATOR_PROMPT_VERSION,
         temperature=0.0,
         validate=lambda response: validate_evaluation(request, response),
     )
     logger.info("function=evaluate_answer outcome=success criteria_count=%d", len(result.criteria))
-    return result
+    context.remaining()
+    return EvaluatorResponse(**result.model_dump(), meta=context.meta())
