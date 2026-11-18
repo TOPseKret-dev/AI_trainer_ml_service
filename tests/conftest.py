@@ -56,8 +56,8 @@ class MockRouter:
         self.requests = []
         self.responses = deque()
         self.results = {
-            "InterviewerLLMResult": interviewer_result,
-            "EvaluatorLLMResult": evaluator_result,
+            "interviewer": interviewer_result,
+            "evaluator": evaluator_result,
         }
         self.http = httpx.AsyncClient(transport=httpx.MockTransport(self.respond))
         self.client = OpenRouterClient(
@@ -73,7 +73,9 @@ class MockRouter:
             if isinstance(response, Exception):
                 raise response
             return response
-        return completion_response(self.results[payload["response_format"]["json_schema"]["name"]])
+        trusted = json.loads(payload["messages"][1]["content"].split("\n", 1)[1])
+        operation = "interviewer" if "follow_up_count" in trusted else "evaluator"
+        return completion_response(self.results[operation])
 
     def queue(self, *results):
         self.responses.extend(completion_response(result) for result in results)

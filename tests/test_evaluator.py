@@ -222,7 +222,7 @@ def test_invalid_domain_result_gets_one_repair_then_502(
     response = client.post(URL, json=evaluator_payload)
     assert response.status_code == 502
     assert len(mock_router.calls) == 2
-    correction = mock_router.calls[1]["messages"][2]
+    correction = mock_router.calls[1]["messages"][3]
     assert correction["role"] == "system"
     assert "нарушил контракт" in correction["content"]
     assert "private-fabricated-evidence" not in correction["content"]
@@ -242,8 +242,14 @@ def test_repair_success_preserves_trust_boundary(
     assert {k: v for k, v in response.json().items() if k != "meta"} == evaluator_result
     assert len(mock_router.calls) == 2
     messages = mock_router.calls[1]["messages"]
-    assert [message["role"] for message in messages] == ["system", "system", "system", "user"]
-    assert "private-fabricated-evidence" not in messages[2]["content"]
+    assert [message["role"] for message in messages] == [
+        "system",
+        "system",
+        "system",
+        "system",
+        "user",
+    ]
+    assert all("private-fabricated-evidence" not in message["content"] for message in messages[:4])
 
 
 def test_evidence_uses_all_candidate_messages(evaluator_payload, evaluator_result):

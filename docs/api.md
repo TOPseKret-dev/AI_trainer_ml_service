@@ -210,9 +210,10 @@ JSON
 
 ## Метаданные meta
 
-`meta` формирует сервис. В JSON Schema structured output для OpenRouter нет
-ни `meta`, ни `error`: Interviewer генерирует только action/message,
-Evaluator — только criteria/summary/recommendations.
+`meta` формирует сервис. OpenRouter вызывается в JSON object mode; предметный
+результат проходит строгую проверку Pydantic и доменных инвариантов до HTTP-ответа.
+Interviewer генерирует только action/message, Evaluator — только
+criteria/summary/recommendations. Поля `meta` и `error` модель не генерирует.
 
 | Поле | Правило |
 | --- | --- |

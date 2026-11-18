@@ -44,9 +44,8 @@ def test_request_budget_and_http_timeout(
     assert all(value == expected for value in timeouts.values())
     trusted = mock_router.calls[0]["messages"][1]["content"]
     assert "deadline_at" not in trusted
-    assert (
-        "meta" not in mock_router.calls[0]["response_format"]["json_schema"]["schema"]["properties"]
-    )
+    assert mock_router.calls[0]["response_format"] == {"type": "json_object"}
+    assert "meta" not in json.loads(trusted.split("\n", 1)[1])
 
 
 @pytest.mark.parametrize("seconds", [-1, 0, 4.9, 5])

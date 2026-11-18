@@ -110,10 +110,10 @@ def test_only_repairable_generation_errors_get_one_repair(
     first, second = mock_router.calls
     for field in ["model", "provider", "temperature", "response_format", "reasoning"]:
         assert first[field] == second[field]
-    assert first["messages"][:2] == second["messages"][:2]
-    assert first["messages"][2:] == second["messages"][3:]
-    assert second["messages"][2]["role"] == "system"
-    assert "not JSON" not in second["messages"][2]["content"]
+    assert first["messages"][:3] == second["messages"][:3]
+    assert first["messages"][3:] == second["messages"][4:]
+    assert second["messages"][3]["role"] == "system"
+    assert "not JSON" not in second["messages"][3]["content"]
 
 
 @pytest.mark.parametrize(
@@ -297,15 +297,16 @@ def test_model_cannot_supply_its_own_meta(
     assert response.json()["meta"]["prompt_tokens"] == 240
 
 
-def test_provider_schema_preserves_structural_format_without_http_fields():
-    from app.clients.openrouter import provider_result_schema
+def test_llm_models_preserve_full_validation_without_http_fields():
     from app.schemas.evaluator import EvaluatorLLMResult
     from app.schemas.interviewer import InterviewerLLMResult
 
     for model in (InterviewerLLMResult, EvaluatorLLMResult):
-        schema = provider_result_schema(model)
+        schema = model.model_json_schema()
         encoded = json.dumps(schema)
         assert schema["additionalProperties"] is False
         assert set(schema["required"]) == set(schema["properties"])
-        for forbidden in ['"meta"', '"error"', '"oneOf"', '"allOf"']:
+        for forbidden in ['"meta"', '"error"']:
             assert forbidden not in encoded
+    # json_object affects only upstream generation, not our published validation.
+    assert '"uniqueItems": true' in json.dumps(EvaluatorLLMResult.model_json_schema())

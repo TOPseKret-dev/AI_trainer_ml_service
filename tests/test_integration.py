@@ -1,4 +1,4 @@
-"""Two paid smoke tests; excluded by default, including when a key is present."""
+"""Three paid smoke tests; excluded by default, including when a key is present."""
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,7 +17,7 @@ def live_client():
     settings = Settings()
     if not settings.openrouter_api_key.get_secret_value().strip():
         pytest.skip("OPENROUTER_API_KEY is not configured")
-    # Production path: two requests, at most four paid calls including semantic repairs.
+    # Production path: three requests, at most six paid calls including semantic repairs.
     with TestClient(app) as test_client:
         router = app.state.openrouter_client
         yield test_client, router
@@ -30,6 +30,16 @@ def test_interviewer_live(live_client, interviewer_payload):
     InterviewerResponse.model_validate(response.json())
     assert router.settings.openrouter_model == "qwen/qwen3.5-27b"
     assert router.settings.openrouter_provider == "alibaba"
+
+
+def test_interviewer_complete_live(live_client, interviewer_payload):
+    test_client, _ = live_client
+    interviewer_payload["dialogue"][0]["content"] = "Я не знаю ответа. Хочу пропустить этот вопрос."
+    response = test_client.post("/api/v1/interviewer", json=interviewer_payload)
+    assert response.status_code == 200, response.text
+    result = InterviewerResponse.model_validate(response.json())
+    assert result.action == "complete"
+    assert result.message is None
 
 
 def test_evaluator_live(live_client, evaluator_payload):

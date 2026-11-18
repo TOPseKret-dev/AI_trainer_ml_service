@@ -1,3 +1,4 @@
+import json
 import math
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -8,28 +9,6 @@ from pydantic import BaseModel
 from app.errors import MLErrorCode, MLServiceError, ProviderNotConfigured
 from app.generation import GenerationContext
 from app.settings import Settings
-
-
-def provider_result_schema(model: type[BaseModel]) -> dict:
-    """Keep the existing structural provider schema; enforce cross-field rules in Python.
-
-    Conditional keywords belong to the full HTTP contracts. Adding them to the
-    previously working provider schema is unnecessary for the v2 migration.
-    """
-    schema = model.model_json_schema()
-
-    def structural(node):
-        if isinstance(node, dict):
-            for keyword in ("oneOf", "allOf", "if", "then", "else"):
-                node.pop(keyword, None)
-            for child in node.values():
-                structural(child)
-        elif isinstance(node, list):
-            for child in node:
-                structural(child)
-
-    structural(schema)
-    return schema
 
 
 def retry_after_seconds(value: str | None) -> int | None:
@@ -151,6 +130,19 @@ class OpenRouterClient:
         key = self.settings.openrouter_api_key.get_secret_value().strip()
         if not key:
             raise ProviderNotConfigured()
+        # JSON object mode needs an explicit trusted format instruction. Never
+        # interpolate candidate text or include HTTP metadata in this schema.
+        output_format = (
+            "Верни ровно один JSON-объект согласно следующей JSON Schema. "
+            "Значение верхнего уровня не может быть null или массивом. "
+            "Если поле допускает null, сохрани это поле внутри объекта.\nJSON Schema:\n"
+            + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+        )
+        messages = [
+            *messages[:2],
+            {"role": "system", "content": output_format},
+            *messages[2:],
+        ]
         payload = {
             "model": self.settings.openrouter_model,
             "messages": messages,
@@ -161,14 +153,10 @@ class OpenRouterClient:
                 "require_parameters": True,
             },
             "reasoning": {"enabled": False},
-            "response_format": {
-                "type": "json_schema",
-                "json_schema": {
-                    "name": response_model.__name__,
-                    "strict": True,
-                    "schema": provider_result_schema(response_model),
-                },
-            },
+            # Alibaba rejects uniqueItems and currently returns root arrays in
+            # json_schema mode. Keep JSON generation and validate the complete
+            # result schema/domain in generate_structured before HTTP success.
+            "response_format": {"type": "json_object"},
         }
         timeout = min(context.remaining(), self.settings.openrouter_timeout_seconds)
         metadata = context.usage.start_attempt()
