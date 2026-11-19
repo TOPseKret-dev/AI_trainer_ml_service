@@ -5,6 +5,11 @@ on:
     branches: [main, dev]
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish_image:
+        description: Publish the checked main commit to the organization GHCR
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -78,3 +83,34 @@ jobs:
       - name: Stop test containers
         if: always()
         run: docker compose down --remove-orphans --volumes
+
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.publish_image &&
+      github.repository == 'intersim-org/intersim-ml' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build and publish the versioned image
+        env:
+          GHCR_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          image="ghcr.io/intersim-org/intersim-ml:${GITHUB_SHA:0:12}"
+          git archive "$GITHUB_SHA" | docker build --platform linux/amd64 \
+            --label "org.opencontainers.image.source=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --tag "$image" -
+          printf '%s\n' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          trap 'docker logout ghcr.io >/dev/null' EXIT
+          docker push "$image"
+          digest_ref=$(docker image inspect --format '{{index .RepoDigests 0}}' "$image")
+          docker manifest inspect "$digest_ref" >/dev/null
+          printf 'Image: `%s`\n\nDigest: `%s`\n' "$image" "$digest_ref" >> "$GITHUB_STEP_SUMMARY"
