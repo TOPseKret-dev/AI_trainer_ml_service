@@ -44,7 +44,7 @@ def test_request_budget_and_http_timeout(
     assert all(value == expected for value in timeouts.values())
     trusted = mock_router.calls[0]["messages"][1]["content"]
     assert "deadline_at" not in trusted
-    assert mock_router.calls[0]["response_format"] == {"type": "json_object"}
+    assert mock_router.calls[0]["response_format"]["type"] == "json_schema"
     assert "meta" not in json.loads(trusted.split("\n", 1)[1])
 
 

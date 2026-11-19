@@ -211,8 +211,9 @@ JSON
 
 ## Метаданные meta
 
-`meta` формирует сервис. OpenRouter вызывается в JSON object mode; предметный
-результат проходит строгую проверку Pydantic и доменных инвариантов до HTTP-ответа.
+`meta` формирует сервис. Основной маршрут OpenRouter использует `json_schema`.
+Предметный результат проходит строгую проверку Pydantic и доменных инвариантов
+до HTTP-ответа.
 Interviewer генерирует только action/message, Evaluator — только
 criteria/summary/recommendations. Поля `meta` и `error` модель не генерирует.
 

@@ -15,7 +15,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ml-checks-${{ github.ref }}
+  group: ml-${{ github.event_name == 'workflow_dispatch' && inputs.publish_image && format('publish-{0}', github.sha) || github.ref }}
   cancel-in-progress: true
 
 jobs:

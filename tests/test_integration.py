@@ -28,8 +28,8 @@ def test_interviewer_live(live_client, interviewer_payload):
     response = test_client.post("/api/v1/interviewer", json=interviewer_payload)
     assert response.status_code == 200, response.text
     InterviewerResponse.model_validate(response.json())
-    assert router.settings.openrouter_model == "qwen/qwen3.5-27b"
-    assert router.settings.openrouter_provider == "alibaba"
+    assert router.settings.openrouter_model == "deepseek/deepseek-v4.1-flash"
+    assert router.settings.openrouter_provider == "deepinfra/fp8"
 
 
 def test_interviewer_complete_live(live_client, interviewer_payload):

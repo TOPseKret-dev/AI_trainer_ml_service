@@ -4,8 +4,9 @@
 Core Backend передаёт контекст вопроса и диалог; ML возвращает уточнение или оценку.
 Interviewer/Evaluator реализуют согласованный контракт v2 / MI-007: обязательная
 meta на успехе, 17 кодов ошибок, deadline_at и максимум один semantic repair.
-OpenRouter использует JSON object mode с обязательной валидацией результата
-в Python; особенности совместимости Alibaba описаны в [документации](docs/development.md).
+Interviewer/Evaluator по умолчанию используют DeepSeek V4.1 Flash через DeepInfra
+со строгой схемой генерации и проверкой результата в Python.
+[Устройство генерации и результаты сравнения](docs/development.md).
 
 | Функция | Состояние |
 | --- | --- |

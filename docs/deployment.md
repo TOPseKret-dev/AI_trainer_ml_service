@@ -6,8 +6,8 @@
 используется отдельная ветка `hotfix/legacy-openrouter-json-object`, основанная
 на серверной версии `74423b7`. В ней исправлен транспорт OpenRouter и сохранены
 старые DTO и HTTP-ошибки. Не обновляйте такой сервер образом из `main` до
-готовности Backend. Исправление JSON object mode присутствует в обеих ветках;
-выбор старого или нового HTTP-контракта не является настройкой environment.
+готовности Backend. HTTP-контракт определяется версией образа. Настройки модели
+и провайдера определяют только маршрут Interviewer/Evaluator в OpenRouter.
 
 ## Что нужно на сервере
 
@@ -58,8 +58,8 @@ Compose читает `.env` для подстановок, но передаёт
 | --- | --- | --- |
 | `OPENROUTER_API_KEY` | обязательно для Compose | Ключ OpenRouter |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | Адрес API провайдера |
-| `OPENROUTER_MODEL` | `qwen/qwen3.5-27b` | Единственная разрешённая сейчас модель |
-| `OPENROUTER_PROVIDER` | `alibaba` | Закреплённый провайдер, fallback отключён |
+| `OPENROUTER_MODEL` | `deepseek/deepseek-v4.1-flash` | Модель Interviewer/Evaluator |
+| `OPENROUTER_PROVIDER` | `deepinfra/fp8` | Закреплённый маршрут, fallback отключён |
 | `OPENROUTER_TIMEOUT_SECONDS` | `55` | Таймаут отдельных HTTP-операций |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `55` | Общий бюджет LLM, включая один repair |
 | `QUESTIONGEN_API_KEY` | пусто | Отдельный ключ генератора; пусто → OPENROUTER_API_KEY |
@@ -80,6 +80,17 @@ Compose читает `.env` для подстановок, но передаёт
 | `ML_STOP_GRACE_PERIOD` | `75s` | Время Docker до принудительного завершения |
 | `ML_NETWORK_NAME` | `intersim-ml` | Создаваемая сеть отдельного запуска |
 | `INTERSIM_NETWORK` | задаётся для интеграции | Настоящее имя существующей сети Backend |
+
+При переходе на новый маршрут обновите обе переменные в существующем `.env`:
+
+```dotenv
+OPENROUTER_MODEL=deepseek/deepseek-v4.1-flash
+OPENROUTER_PROVIDER=deepinfra/fp8
+```
+
+Поддерживается и явная пара `qwen/qwen3.5-27b` + `alibaba`. Значения из `.env`
+имеют приоритет над значениями Compose по умолчанию. Генератор вопросов и ASR
+используют собственные настройки.
 
 CPU, память, concurrency и `/tmp` — стартовые эксплуатационные настройки,
 которые нужно подобрать по нагрузке. `ML_CONCURRENCY` не является отдельным
@@ -166,9 +177,11 @@ docker compose pull ml-service
 docker compose up -d --no-build --wait
 ```
 
-Здесь `ML_IMAGE` должен указывать на реально опубликованный version tag или digest,
-например `ghcr.io/intersim-org/intersim-ml:<версия>`. Этот репозиторий не публикует
-образ и не меняет сервер автоматически: CI выполняет проверки и сборку.
+В `ML_IMAGE` укажите опубликованный тег или точный digest из Summary релизного
+workflow. Workflow `ML service checks` публикует образ в `ghcr.io/intersim-org/intersim-ml`
+при ручном запуске из `main` репозитория организации с `publish_image=true`.
+Публикация доступна после прохождения проверок. Для загрузки приватного пакета
+нужен доступ к нему в GitHub Packages. Оператор сервера запускает обновление отдельно.
 
 Базовый Python digest обновляйте отдельным изменением Dockerfile с повторной
 сборкой и smoke. `--pull` не меняет уже закреплённый digest.

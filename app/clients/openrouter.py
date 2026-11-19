@@ -2,6 +2,7 @@ import json
 import math
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
+from typing import Any
 
 import httpx
 from pydantic import BaseModel
@@ -9,6 +10,56 @@ from pydantic import BaseModel
 from app.errors import MLErrorCode, MLServiceError, ProviderNotConfigured
 from app.generation import GenerationContext
 from app.settings import Settings
+
+_PROVIDER_OMITTED_KEYWORDS = {"title", "description", "oneOf", "allOf", "uniqueItems", "pattern"}
+_FORMAT_EXAMPLES = {
+    "InterviewerLLMResult": '{"action":"complete","message":null}',
+    "EvaluatorLLMResult": (
+        '{"criteria":[{"criterion_id":"<ID из рубрики>","score":0,"status":"absent",'
+        '"comment":"<объяснение>","evidence":[]}],"summary":"<резюме>","recommendations":[]}'
+    ),
+}
+
+
+def _provider_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Project the application schema onto the keywords used in the provider request."""
+    result = {key: value for key, value in schema.items() if key not in _PROVIDER_OMITTED_KEYWORDS}
+    for key in ("properties", "$defs"):
+        if key in result:
+            result[key] = {name: _provider_schema(child) for name, child in result[key].items()}
+    if "items" in result:
+        result["items"] = _provider_schema(result["items"])
+    if "anyOf" in result:
+        result["anyOf"] = [_provider_schema(child) for child in result["anyOf"]]
+    return result
+
+
+def _output_format(model: type[BaseModel], provider: str) -> tuple[str, dict[str, Any]]:
+    schema = model.model_json_schema()
+    if provider == "deepinfra/fp8":
+        example = _FORMAT_EXAMPLES[model.__name__]
+        instruction = (
+            f"Верни только один непустой JSON-объект. Обязательные поля и форма: {example}. "
+            "Это пример формы, значения рассчитай для текущего диалога. "
+            "Не возвращай {}, [], null или Markdown."
+        )
+        return instruction, {
+            "type": "json_schema",
+            "json_schema": {
+                "name": model.__name__,
+                "strict": True,
+                "schema": _provider_schema(schema),
+            },
+        }
+    # Alibaba rejects uniqueItems and may emit scalars/arrays in json_schema mode.
+    # Full Pydantic and domain validation applies to both generation formats.
+    instruction = (
+        "Верни ровно один JSON-объект согласно следующей JSON Schema. "
+        "Значение верхнего уровня не может быть null или массивом. "
+        "Если поле допускает null, сохрани это поле внутри объекта.\nJSON Schema:\n"
+        + json.dumps(schema, ensure_ascii=False)
+    )
+    return instruction, {"type": "json_object"}
 
 
 def retry_after_seconds(value: str | None) -> int | None:
@@ -130,13 +181,8 @@ class OpenRouterClient:
         key = self.settings.openrouter_api_key.get_secret_value().strip()
         if not key:
             raise ProviderNotConfigured()
-        # JSON object mode needs an explicit trusted format instruction. Never
-        # interpolate candidate text or include HTTP metadata in this schema.
-        output_format = (
-            "Верни ровно один JSON-объект согласно следующей JSON Schema. "
-            "Значение верхнего уровня не может быть null или массивом. "
-            "Если поле допускает null, сохрани это поле внутри объекта.\nJSON Schema:\n"
-            + json.dumps(response_model.model_json_schema(), ensure_ascii=False)
+        output_format, response_format = _output_format(
+            response_model, self.settings.openrouter_provider
         )
         messages = [
             *messages[:2],
@@ -153,10 +199,7 @@ class OpenRouterClient:
                 "require_parameters": True,
             },
             "reasoning": {"enabled": False},
-            # Alibaba rejects uniqueItems and currently returns root arrays in
-            # json_schema mode. Keep JSON generation and validate the complete
-            # result schema/domain in generate_structured before HTTP success.
-            "response_format": {"type": "json_object"},
+            "response_format": response_format,
         }
         timeout = min(context.remaining(), self.settings.openrouter_timeout_seconds)
         metadata = context.usage.start_attempt()

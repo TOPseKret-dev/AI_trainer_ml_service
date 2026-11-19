@@ -50,15 +50,17 @@ def test_request_construction(
     ]
     assert client.post(f"/api/v1/{service}", json=payload).status_code == 200
     call = mock_router.calls[0]
-    assert call["model"] == "qwen/qwen3.5-27b"
+    assert call["model"] == "deepseek/deepseek-v4.1-flash"
     assert call["temperature"] == temperature
     assert call["provider"] == {
-        "order": ["alibaba"],
+        "order": ["deepinfra/fp8"],
         "allow_fallbacks": False,
         "require_parameters": True,
     }
     assert call["reasoning"] == {"enabled": False}
-    assert call["response_format"] == {"type": "json_object"}
+    response_format = call["response_format"]
+    assert response_format["type"] == "json_schema"
+    assert response_format["json_schema"]["strict"] is True
     assert "JSON" in prompt
     assert set(call) == {
         "model",
@@ -72,8 +74,11 @@ def test_request_construction(
     assert prompt and version
     assert messages[0] == {"role": "system", "content": prompt}
     assert messages[2]["role"] == "system"
-    result_schema = json.loads(messages[2]["content"].split("\nJSON Schema:\n", 1)[1])
-    assert result_schema == schema.model_json_schema()
+    result_schema = response_format["json_schema"]["schema"]
+    assert result_schema["type"] == "object"
+    assert result_schema["additionalProperties"] is False
+    assert result_schema["required"] == schema.model_json_schema()["required"]
+    assert "uniqueItems" not in json.dumps(result_schema)
     assert not {"meta", "error"} & result_schema["properties"].keys()
     trusted = json.loads(messages[1]["content"].split("\n", 1)[1])
     assert trusted == {k: v for k, v in payload.items() if k != "dialogue"}
@@ -191,8 +196,8 @@ def test_observability_has_usage_and_no_content(client, mock_router, evaluator_p
     logs = "\n".join(r.getMessage() for r in caplog.records)
     for expected in (
         "service=evaluator",
-        "model=qwen/qwen3.5-27b",
-        "provider=alibaba",
+        "model=deepseek/deepseek-v4.1-flash",
+        "provider=deepinfra/fp8",
         f"prompt_version={EVALUATOR_PROMPT_VERSION}",
         "attempt=1",
         "latency_ms=",
@@ -235,6 +240,7 @@ def test_settings_load_dotenv_and_environment(tmp_path, monkeypatch):
         {"openrouter_timeout_seconds": float("inf")},
         {"openrouter_provider": "another-provider"},
         {"openrouter_model": "another-model"},
+        {"openrouter_model": "qwen/qwen3.5-27b", "openrouter_provider": "deepinfra/fp8"},
     ],
 )
 def test_invalid_settings(values):
