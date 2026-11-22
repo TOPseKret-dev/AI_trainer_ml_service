@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.settings import Settings
@@ -42,18 +44,33 @@ def test_json_mode_preserves_result_validation_and_single_repair(
         assert result["error"]["code"] == "ML_SCHEMA_ERROR"
 
 
-@pytest.mark.parametrize(
-    "result",
-    ['{"action":"complete","message":null', '{"action":"follow_up","message":"Что произойдёт?"'],
-)
-def test_missing_final_brace_is_recovered_without_a_second_call(
-    client, mock_router, interviewer_payload, result
+@pytest.mark.parametrize("operation", ["interviewer", "evaluator"])
+@pytest.mark.parametrize("repair_succeeds", [True, False])
+def test_missing_final_brace_requires_provider_repair(
+    client,
+    mock_router,
+    interviewer_payload,
+    evaluator_payload,
+    interviewer_result,
+    evaluator_result,
+    operation,
+    repair_succeeds,
 ):
-    mock_router.queue(result)
-    response = client.post("/api/v1/interviewer", json=interviewer_payload)
-    assert response.status_code == 200
-    assert response.json()["meta"]["provider_attempts"] == 1
-    assert len(mock_router.calls) == 1
+    payload = interviewer_payload if operation == "interviewer" else evaluator_payload
+    valid = interviewer_result if operation == "interviewer" else evaluator_result
+    incomplete = json.dumps(valid, ensure_ascii=False).removesuffix("}")
+    mock_router.queue(incomplete, valid if repair_succeeds else incomplete)
+
+    response = client.post(f"/api/v1/{operation}", json=payload)
+
+    result = response.json()
+    assert result["meta"]["provider_attempts"] == 2
+    assert len(mock_router.calls) == 2
+    assert response.status_code == (200 if repair_succeeds else 502)
+    if repair_succeeds:
+        assert {key: value for key, value in result.items() if key != "meta"} == valid
+    else:
+        assert result["error"]["code"] == "ML_SCHEMA_ERROR"
 
 
 @pytest.mark.parametrize(
