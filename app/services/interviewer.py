@@ -1,5 +1,6 @@
 import logging
 
+from app.clients.openai import OpenAIClient
 from app.clients.openrouter import OpenRouterClient
 from app.generation import GenerationContext
 from app.prompts.interviewer import INTERVIEWER_PROMPT_VERSION, INTERVIEWER_SYSTEM_PROMPT
@@ -11,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def generate_interviewer_turn(
     request: InterviewerRequest,
-    client: OpenRouterClient,
+    client: OpenRouterClient | OpenAIClient,
     context: GenerationContext | None = None,
 ) -> InterviewerResponse:
     context = context or GenerationContext("interviewer")
