@@ -1,5 +1,6 @@
 import logging
 
+from app.clients.openai import OpenAIClient
 from app.clients.openrouter import OpenRouterClient
 from app.errors import MLErrorCode, MLServiceError
 from app.generation import GenerationContext
@@ -48,7 +49,7 @@ def validate_evaluation(request: EvaluatorRequest, response: EvaluatorLLMResult)
 
 async def evaluate_answer(
     request: EvaluatorRequest,
-    client: OpenRouterClient,
+    client: OpenRouterClient | OpenAIClient,
     context: GenerationContext | None = None,
 ) -> EvaluatorResponse:
     context = context or GenerationContext("evaluator")
