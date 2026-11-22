@@ -6,6 +6,7 @@ from typing import TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from app.clients.openai import OpenAIClient
 from app.clients.openrouter import OpenRouterClient
 from app.errors import MLErrorCode, MLServiceError, ProviderTimeout
 from app.generation import GenerationContext
@@ -61,7 +62,7 @@ def build_messages(
 
 async def generate_structured(
     *,
-    client: OpenRouterClient,
+    client: OpenRouterClient | OpenAIClient | OpenAIClient,
     context: GenerationContext,
     messages: list[dict[str, str]],
     response_model: type[ResponseT],
@@ -168,8 +169,8 @@ async def _generate_attempts(
                 "prompt_tokens=%s completion_tokens=%s reasoning_tokens=%s repair=%s "
                 "validation_issue=%s",
                 service,
-                client.settings.openrouter_model,
-                client.settings.openrouter_provider,
+                client.model_name,
+                client.provider_name,
                 prompt_version,
                 context.correlation_id,
                 len(context.usage.attempts),
