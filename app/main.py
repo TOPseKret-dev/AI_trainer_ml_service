@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException
 from app.api.router import api_router
 from app.api.routes.health import router as health_router
 from app.asr_admission import AsrAdmission
+from app.clients.openai import OpenAIClient
 from app.clients.openrouter import OpenRouterClient
 from app.errors import MLErrorCode, MLServiceError
 from app.http_contract import MLContractMiddleware, error_response, get_context
@@ -25,7 +26,11 @@ logger = logging.getLogger("ml_service.requests")
 async def lifespan(app: FastAPI):
     settings = Settings()
     async with httpx.AsyncClient() as http:
-        app.state.openrouter_client = OpenRouterClient(http, settings)
+        app.state.openrouter_client = (
+            OpenAIClient(http, settings)
+            if settings.llm_provider == "openai"
+            else OpenRouterClient(http, settings)
+        )
         try:
             yield
         finally:
@@ -38,7 +43,7 @@ app = FastAPI(
     title="InterSim ML Service",
     version="0.2.0",
     description=(
-        "OpenRouter interviewer/evaluator; Groq ASR; autonomous draft question generation. "
+        "Selectable OpenAI/OpenRouter interviewer/evaluator; configurable ASR; draft generation. "
         "The original question-bank stub remains available for compatibility."
     ),
     lifespan=lifespan,
