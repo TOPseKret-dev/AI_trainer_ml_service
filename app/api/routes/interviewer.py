@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import get_openrouter_client
+from app.clients.openai import OpenAIClient
 from app.clients.openrouter import OpenRouterClient
 from app.schemas.interviewer import InterviewerRequest, InterviewerResponse
 from app.schemas.meta import InterviewerErrorResponse
@@ -19,7 +20,7 @@ router = APIRouter(tags=["interviewer"])
 async def interviewer_turn(
     request: InterviewerRequest,
     http_request: Request,
-    client: Annotated[OpenRouterClient, Depends(get_openrouter_client)],
+    client: Annotated[OpenRouterClient | OpenAIClient, Depends(get_openrouter_client)],
 ) -> InterviewerResponse:
     return await service.generate_interviewer_turn(
         request, client, http_request.state.generation_context
