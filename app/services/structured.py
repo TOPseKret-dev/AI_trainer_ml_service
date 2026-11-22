@@ -62,7 +62,7 @@ def build_messages(
 
 async def generate_structured(
     *,
-    client: OpenRouterClient | OpenAIClient | OpenAIClient,
+    client: OpenRouterClient | OpenAIClient,
     context: GenerationContext,
     messages: list[dict[str, str]],
     response_model: type[ResponseT],
@@ -94,7 +94,7 @@ async def generate_structured(
 
 async def _generate_attempts(
     *,
-    client: OpenRouterClient,
+    client: OpenRouterClient | OpenAIClient,
     context: GenerationContext,
     messages: list[dict[str, str]],
     response_model: type[ResponseT],
