@@ -170,6 +170,18 @@ class OpenRouterClient:
         self.http = http
         self.settings = settings
 
+    @property
+    def model_name(self) -> str:
+        return self.settings.openrouter_model
+
+    @property
+    def provider_name(self) -> str:
+        return self.settings.openrouter_provider
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.settings.openrouter_api_key.get_secret_value().strip())
+
     async def complete(
         self,
         *,
