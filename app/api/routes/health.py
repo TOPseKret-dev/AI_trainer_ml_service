@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 
 from app.api.dependencies import get_openrouter_client
+from app.clients.openai import OpenAIClient
 from app.clients.openrouter import OpenRouterClient
 from app.errors import ProviderNotConfigured
 from app.schemas.common import HealthResponse, ReadinessResponse
@@ -18,9 +19,9 @@ async def health() -> HealthResponse:
 
 @router.get("/health/ready", response_model=ReadinessResponse)
 async def readiness(
-    client: Annotated[OpenRouterClient, Depends(get_openrouter_client)],
+    client: Annotated[OpenRouterClient | OpenAIClient, Depends(get_openrouter_client)],
 ) -> ReadinessResponse:
     """Check local LLM configuration without a provider request or inference charge."""
-    if not client.settings.openrouter_api_key.get_secret_value().strip():
+    if not client.is_configured:
         raise ProviderNotConfigured()
     return ReadinessResponse(status="ready", service="ml-service")
