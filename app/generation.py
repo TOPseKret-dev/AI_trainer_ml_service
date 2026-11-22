@@ -31,8 +31,14 @@ class AttemptMetadata:
             return
         usage = body["usage"]
         self.prompt_tokens = token_count(usage.get("prompt_tokens"))
+        if self.prompt_tokens is None:
+            self.prompt_tokens = token_count(usage.get("input_tokens"))
         self.completion_tokens = token_count(usage.get("completion_tokens"))
+        if self.completion_tokens is None:
+            self.completion_tokens = token_count(usage.get("output_tokens"))
         details = usage.get("completion_tokens_details")
+        if details is None:
+            details = usage.get("output_tokens_details")
         if isinstance(details, dict):
             self.reasoning_tokens = token_count(details.get("reasoning_tokens"))
 
