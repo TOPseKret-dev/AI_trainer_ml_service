@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 
 from app.api.dependencies import get_openrouter_client
+from app.clients.openai import OpenAIClient
 from app.clients.openrouter import OpenRouterClient
 from app.schemas.evaluator import EvaluatorRequest, EvaluatorResponse
 from app.schemas.meta import EvaluatorErrorResponse
@@ -19,6 +20,6 @@ router = APIRouter(tags=["evaluator"])
 async def evaluate(
     request: EvaluatorRequest,
     http_request: Request,
-    client: Annotated[OpenRouterClient, Depends(get_openrouter_client)],
+    client: Annotated[OpenRouterClient | OpenAIClient, Depends(get_openrouter_client)],
 ) -> EvaluatorResponse:
     return await service.evaluate_answer(request, client, http_request.state.generation_context)
